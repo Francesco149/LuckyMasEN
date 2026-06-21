@@ -38,6 +38,10 @@ def lzss_compress(data, N=4096, F=18, THRESHOLD=2, init=0x20):
             if idx != -1:
                 best_len, best_pos = L, idx; break
             L -= 1
+        if best_len >= THRESHOLD + 1:                  # forbid self-overlapping (RLE) matches:
+            avail = a - ((best_pos - R0) % N)          # the decoder would read bytes it writes
+            if best_len > avail:                       # mid-copy; clamp to already-written history
+                best_len = avail
         if best_len >= THRESHOLD + 1:
             group.append(best_pos & 0xff)
             group.append(((best_pos >> 4) & 0xf0) | ((best_len - (THRESHOLD + 1)) & 0x0f))

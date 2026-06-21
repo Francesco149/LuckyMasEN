@@ -163,3 +163,32 @@ real story; the LuckyMas-relevant findings:
   SSH route was a dead end). nircmd does **not** actually hang as Administrator (the session-1 "hang" was
   a Startup-batch context artifact); but nircmd with **no/garbled args pops a modal** that wedges a
   single-threaded caller — that DID look like the hang.
+
+---
+
+## 2026-06-22 — Session 3: pivot to a native XP-local server; XP-era TLS proven
+
+- **Decision (owner-directed):** build the calendar/mail server **natively on XP** (Schannel HTTPS +
+  plain-socket HTTP/POP3), not on a separate box. Rationale + target architecture →
+  [`next-builds.md`](next-builds.md) §"Session 3". The win: server (Schannel) and client (gcal.exe
+  WinINet) are the **same 2007 stack**, so the TLS handshake is period-accurate by construction — no
+  modern-TLS coercion, no separate always-on host.
+- **XP-era TLS handshake de-risked (local proof).** Added an HTTPS listener to `gcal_emu.py` (`--https`)
+  with a self-signed `www.google.com` cert (**RSA-2048, SHA-1**, CN+SAN, 20y — `make-xp-cert.sh`,
+  `certs/`). A TLS1.0 + **AES128-SHA** (RSA-kx CBC) client — XP SP3's exact capability — completes the
+  handshake and gets `Auth=` over TLS. ⇒ XP's WinINet will handshake our cert; the native Schannel server
+  reproduces the same suite.
+  - **OpenSSL 3.x gotcha (cost ~an hour):** to serve TLS1.0 you must drop the security level with a
+    **colon-separated** token — `set_ciphers('…:@SECLEVEL=0')`. Without the colon (`…SHA@SECLEVEL=0`) the
+    seclevel stays ≥1 and the server rejects the TLS1.0 ClientHello with a **`protocol_version` alert
+    (70)** — looks like "TLS1.0 unsupported" but it's a seclevel artifact. nixpkgs OpenSSL 3.6 *does*
+    support TLS1.0.
+- **Infra finding:** `code`'s Caddy **wildcard-binds `*:80`/`*:443`**, so a secondary IP (`10.0.10.54`)
+  can't host `:443` either → the code-hosting route is a dead end for the HTTPS endpoint. Moot now (XP-local
+  `hosts → 127.0.0.1`). Scaffolding torn down; Caddy left intact.
+- **Cert trust:** the native server **installs the self-signed cert into XP's Root by default**
+  (`CertAddEncodedCertificateToStore`); WinINet won't trust self-signed otherwise, harmless if it ignored
+  cert errors → no separate trust-probe needed.
+- **Live infra confirmed this session:** xphttpd agent live at **10.0.10.113:8099** (`/run` ok, XP SP3);
+  `ssh root@code.soy` works (LAN tooling, `nix run nixpkgs#netexec`); i686 mingw cross-gcc fetchable via
+  `nix … pkgsCross.mingw32.buildPackages.gcc` (cached, ~79 MiB).

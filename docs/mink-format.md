@@ -68,9 +68,12 @@ konata.Xvi entries:
 | `CharaMain01` | 0x19C94 | 0x197AC | 0x197AC | **PNG** | character frame 1 |
 | `Ini`         | 0x33440 | 0x262   | 0x390   | `FF 5B 4E 41 4D 45 5D` = `\xFF[NAME]` | **compressed text** config/speech |
 
-→ The launcher's PNGs come straight out (stored). The **`Ini` blob is compressed text** (`[NAME]…`)
-— almost certainly the character's name/dialogue (cf. `Launch.exe`'s `SERIF_BASE` speech bitmap and
-its `TextOutA`/`DrawTextA`). **Translatable once the codec is cracked.**
+→ The launcher's PNGs come straight out (stored, 8-bit RGBA). The **`Ini` blob decompresses (LZSS,
+below) to the character's speech config** — `[NAME] Name=…`, `[POS]` (sprite + speech-bubble layout:
+`Center`, `Bust{X,Y,W,H}`, `Serif{X,Y}`), and `[Msg]` with **10 `Serif*` dialogue lines**
+(`SerifNewVersion`, `SerifMailCheck`, `SerifCallenderSchedule=今日の予定は\n<%SCHEDULE%>…`, …, with
+`\n` line breaks + `<%VAR%>` templates). `tools/sygnas_unpack.py` extracts all **22 characters'
+name + 220 speech lines** as editable Shift-JIS INI — the launcher's entire text surface.
 
 ---
 
@@ -97,18 +100,27 @@ Contents histogram: **111 × `.png` + 4 × `.nut`**.
 
 ---
 
-## Compression
+## Compression — ACZ text = Okumura LZSS (✅ confirmed)
 
-A recurring scheme on the **text-bearing** blobs (ACZ `Ini`, PACKDATA `*.nut`): a leading **`0xFF`**
-byte, then a stream whose start *looks* like the plain text (`[NAME]`, `/* 計算`) but whose stored
-length is < the recorded uncompressed length. → a lightweight **LZ/RLE with `0xFF` as the opcode/escape**
-(SYGNAS in-house, shared lib). PNG chunks are stored verbatim (no `0xFF`, sizes equal). The `.mink`
-`a0`/`m0` streams use a *different* framing (`38 47 03 01…`, no `0xFF` lead) — possibly the same
-codec with a different header, possibly heavier/encrypted.
+The ACZ `Ini` blob is **canonical Okumura LZSS**, proven by byte-exact decode of all 22 launcher
+files (`tools/sygnas_unpack.py`): ring buffer **N=4096**, max match **F=18**, **THRESHOLD=2**, ring
+**pre-filled with `0x20`**, flag bit **set = literal** (clear = a 2-byte back-reference:
+`pos = lo | ((hi & 0xF0) << 4)`, `len = (hi & 0x0F) + 3`). The leading **`0xFF`** everyone notices is
+simply the **first flag byte** — the opening 8 tokens are all literals because the ring is still
+"empty", so it's not a separate marker. Each `Ini` decodes to exactly its recorded `usize`, clean Shift-JIS.
 
-**To finish:** decompress one ACZ `Ini` (smallest, plain-text target) → infer the opcode set →
-apply to `.nut` → then attack the `.mink` `a0`/`m0`. Decompiling the relevant routine in `MinkIt.dll`
-/ `Launch.exe` (both MSVC-2005, unstripped, cdecl) in Ghidra is the reliable path.
+Two blobs use **different, not-yet-cracked codecs** (both open with a stray flag byte but diverge
+under Okumura at the first back-reference):
+- **PACKDATA `*.nut`** (calc Squirrel) — Okumura reproduces the literal prefix
+  (`/* 計算機クラス(ベース) */ class …`) then diverges and overshoots `usize` → a different LZSS
+  tuning/codec. **Off the TL critical path** (the calc UI is in WinCalc.exe's PE string-table + the
+  PNG button skins in `data.pak`), so deferred.
+- **`.mink` `a0`/`m0`** (sprite + mask) — Okumura yields a run of `0x20` (ring-init leakage) → **not**
+  this codec. A separate sprite stream (`38 47 03 01 21 13 47 04 …`, header identical across all
+  files). Carries no translatable text → deferred (a sprite-editing nicety; doesn't gate the TL).
+
+**To crack `.nut`/`.mink`:** decompile the decode routine in `MinkIt.dll` / `WinCalc.exe` (both
+MSVC-2005, unstripped, cdecl) in Ghidra — now faster than black-box brute-forcing.
 
 ## Tooling
 

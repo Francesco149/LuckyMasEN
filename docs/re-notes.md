@@ -84,3 +84,23 @@ qemu/xdelta3/python-construct-lief-pillow) available.
 3. `tools/`: container unpack/repack (stored chunks round-trip today; codec gates the rest).
 4. Stand up the **wine inner loop** (flake has wine; box has WSLg/GPU) for fast patch iteration.
 5. Sync the corrections above into the upstream scope doc.
+
+---
+
+## 2026-06-21 — Session 1 (cont.): codec cracked + container unpacker
+
+- **Codec cracked (for the text):** the ACZ `Ini` blobs are **canonical Okumura LZSS**
+  (N=4096 / F=18 / THRESHOLD=2 / ring-init `0x20` / flag-bit-set = literal) — byte-exact on all 22
+  launcher files. The "`0xFF` prefix" was just the first all-literal flag byte → [`mink-format.md`](mink-format.md).
+- **`tools/sygnas_unpack.py`** (stdlib-only, runs anywhere) parses MINK/ACZ/PACKDATA and LZSS-decodes
+  the ACZ text. It extracts the **launcher's entire text surface**: 22 characters ×
+  (`Name=` + 10 `Serif*` lines) = **220 dialogue lines**, as editable Shift-JIS INI, plus 44 char PNGs.
+- **Scope correction:** the launcher has **22** characters, not 23.
+- **`.nut` (calc Squirrel) and `.mink` a0/m0 (sprite) use *other* codecs** — deferred; neither gates
+  the TL (calc text is in PE resources; sprites carry no text). Crack via Ghidra if/when wanted.
+- **Translation surface — now located + (partly) tooled:**
+  - launcher speech → `tools/sygnas_unpack.py` on `*.Xvi` ✅ (editable INI).
+  - GUI dialogs/menus/string-tables (lang 1041) → resource edit (lief / Resource Hacker). *[TODO tool]*
+  - `Launch.ini` titles + `MinkIt.ini` + wallpaper HTML + `お読みください.txt` → plain-text edits.
+- **Next:** (a) an LZSS **repacker** to round-trip an edited `Ini` back into the ACZ (+ re-Inno or
+  static patch); (b) a PE-resource string dumper/patcher (lief); (c) lock route A vs B; (d) wine smoke-test.

@@ -145,3 +145,40 @@ whatever the request logger captures on the first real run.
   `www.google.com` with an **XP-trusted self-signed cert + XP-SP3 TLS** (TLS1.0/AES-CBC). Then the feeds
   follow → the Serif bubbles fire. Ghidra-xref the JP error string in `gcalcore.dll` to pin whether the
   cert must be trusted vs cert-errors-ignored.
+
+## ▶ Session 3 (2026-06-22) — PIVOT: build the native XP-local server (Build 3 is now THE path)
+
+Owner-directed: **stop hosting the emulator on a separate LAN box / coercing modern TLS — build the
+server natively on XP itself** (the end-user deliverable, was "Build 3, future"). Why it's strictly better:
+- **TLS becomes trivial by construction.** On XP the server speaks **Schannel** and gcal.exe's client is
+  **WinINet** — the *same* 2007 stack → the handshake is period-accurate with no SECLEVEL hacks, no
+  "will Go/Python negotiate XP's handshake", no ancient ciphers to coerce: they're already there.
+- **The code-hosting route kept fighting infra:** `code`'s Caddy **wildcard-binds `*:80`/`*:443`**, so even
+  a secondary IP (`10.0.10.54`) can't take `:443`. On XP, `hosts → 127.0.0.1` and our server owns
+  `127.0.0.1:{80,443,110}` with nothing else there → the whole hosting apparatus evaporates.
+- It's the actual product (no Google account) and kills the separate-always-on-box requirement + the
+  POP3-can't-be-Caddy-fronted limitation in one move.
+
+**De-risked this session — the XP-era handshake works:** a TLS1.0 + RSA-kx **AES128-CBC-SHA** client (XP
+SP3's exact capability) against our **SHA-1/RSA-2048 self-signed `www.google.com`** cert completes and
+returns `Auth=` (local OpenSSL proof; the gcal-emu `--https` listener + `certs/` + `make-xp-cert.sh`).
+So XP's WinINet will handshake our cert; the native Schannel server reproduces the same.
+
+**Target architecture — one self-contained Win32 EXE (i686, XP subsystem):**
+- plain sockets for **HTTP feeds (:80)** + **POP3 (:110)** — trivial C (`xphttpd` proves the socket
+  scaffolding; the response logic ports straight from `gcal_emu.py`, kept as the protocol oracle).
+- **Schannel** for **HTTPS `/accounts/ClientLogin` (:443)** — the one fiddly piece
+  (`AcquireCredentialsHandle` → `AcceptSecurityContext` token loop → `Encrypt/DecryptMessage`); only
+  debuggable on XP via the live agent (no local loop / debugger). Raw Schannel honors "use XP's own
+  ciphers"; **fallback** = statically link mbedTLS (portable/testable on Linux, bigger EXE) only if
+  Schannel server-side fights us.
+- cert in-process: bundle the cert+key as `.pfx` → **`PFXImportCertStore`** gives Schannel its server
+  credential (no system store needed); **`CertAddEncodedCertificateToStore(ROOT,…)`** installs the public
+  cert so WinINet trusts it. **Install into Root by default** (WinINet won't trust self-signed otherwise;
+  harmless if gcal.exe ignored cert errors → no separate trust-probe needed).
+- first-run/installer: `hosts: www.google.com → 127.0.0.1`, drop+autostart the EXE (Startup, like xphttpd).
+
+**Next steps:** (1) make the `.pfx`; (2) plain-socket HTTP/POP3 core (port `gcal_emu.py` responses to C);
+(3) Schannel ClientLogin handshake + in-proc cert install; (4) i686-mingw build (cached on `code` via
+`nix … pkgsCross.mingw32.buildPackages.gcc`), deploy via netexec, drive gcal.exe via the agent, capture
+the Serif bubbles. The `code`-hosted Python path is **retired for the deliverable, kept as the oracle**.

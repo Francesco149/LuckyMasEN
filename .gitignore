@@ -1,0 +1,31 @@
+# ── Never redistribute the original copyrighted SYGNAS files ──────────────
+# originals/ holds the owner's OWN copy (disc rip + cracked installer payload),
+# used only as RE input. Track only its explanatory README.
+/originals/*
+!/originals/README.md
+
+# Derived-from-originals artifacts (extracted sprites, dumped strings, hives …)
+# — also not for redistribution.
+/work/
+/extracted/
+/scratch/
+
+# Test loops
+/.wine/
+/wineprefix/
+*.qcow2
+
+# Nix / direnv build outputs
+/result
+/result-*
+/.direnv/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Editor / OS
+*.swp
+*~
+.DS_Store

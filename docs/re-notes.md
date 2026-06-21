@@ -104,3 +104,24 @@ qemu/xdelta3/python-construct-lief-pillow) available.
   - `Launch.ini` titles + `MinkIt.ini` + wallpaper HTML + `お読みください.txt` → plain-text edits.
 - **Next:** (a) an LZSS **repacker** to round-trip an edited `Ini` back into the ACZ (+ re-Inno or
   static patch); (b) a PE-resource string dumper/patcher (lief); (c) lock route A vs B; (d) wine smoke-test.
+
+---
+
+## 2026-06-21 — Session 1 (cont.): repacker + EN launcher translation + deploy
+
+- **Repacker built + verified** (`tools/sygnas_repack.py`): an Okumura-LZSS *encoder* that's
+  byte-for-byte decode-compatible (selftest: encode→decode == identity on all 22; output within ~2
+  bytes of SYGNAS's own compressor). Fixed one bug — forbid **self-overlapping (RLE) matches** (else
+  the decoder reads a byte it writes mid-copy: `crisis since`→`crisisisince`). The per-chunk `tag` is
+  a constant type id (`0x8b878b01` for every Ini), **not a checksum** → kept verbatim.
+- **Rough EN machine-translation of all 22 launcher characters** (`tools/build_launcher_en.py` →
+  `patch/launcher/<char>.ini`): Name + 8 `Serif*` lines each, structure/`[POS]`/`\n`/`<%SCHEDULE%>`
+  preserved. Repacked → all 22 round-trip exactly; total `.Xvi` size delta **+436 B**.
+- **Deployed to the XP Time Machine** (cold disk, **mounted by NTFS UUID** — the disk re-letters
+  sda↔sdb; a first `sda1` attempt mounted Win7's System-Reserved and `set -e`-aborted before any
+  write): 22 EN `.Xvi` overwrote `…\らき☆マス\launcher\` (originals →
+  `courier:/root/luckymas-launcher-orig.20260621-202727`), deployed bytes `cmp`-verified. Also
+  dropped the **SMBus identity INF** (`xp/chipset-inf/smbus_null.inf`) into `C:\WINDOWS\inf\` +
+  `C:\retro-kit\chipset-inf\`. Pending the owner's single reboot to test both.
+- **Still open:** PE-resource UI strings (lief), `Launch.ini` titles + wallpaper HTML (trivial), the
+  `.nut`/`.mink` codecs, route A/B lock-in, wine/QEMU loop.

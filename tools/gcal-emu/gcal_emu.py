@@ -276,6 +276,24 @@ class ThreadingPOP3(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
 
+# ---- HTTPS (XP-era TLS) --- THROWAWAY probe of the real native-XP target -------
+# gcal.exe does /accounts/ClientLogin over TLS (WinINet 12157 otherwise). The real
+# fix is a native XP-local server using Schannel (period-accurate by construction);
+# this listener exists only to PROVE XP's WinINet completes the handshake + learn
+# whether the self-signed cert must be XP-Root-trusted, before that native build.
+def make_https(bind, port, certfile, keyfile):
+    import ssl
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1            # XP SP3 = SSL3/TLS1.0
+    ctx.maximum_version = ssl.TLSVersion.TLSv1_2
+    ctx.set_ciphers('AES128-SHA:AES256-SHA:DES-CBC3-SHA:@SECLEVEL=0')  # RSA-kx CBC/3DES
+    # NB: the ':@SECLEVEL=0' token MUST be colon-separated, else seclevel stays >=1
+    # and OpenSSL 3.x rejects the TLS1.0 ClientHello with a protocol_version alert.
+    ctx.load_cert_chain(certfile, keyfile)
+    srv = ThreadingHTTPServer((bind, port), Handler)     # same routes/Handler
+    srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+    return srv
+
 # ---- main ----------------------------------------------------------------------
 def apply_scenario_arg(arg):
     for kv in arg.split(','):
@@ -288,6 +306,10 @@ def main(argv):
     ap.add_argument('--http', type=int, default=int(os.environ.get('GCAL_EMU_HTTP_PORT', 80)))
     ap.add_argument('--pop',  type=int, default=int(os.environ.get('GCAL_EMU_POP_PORT', 110)))
     ap.add_argument('--bind', default=os.environ.get('GCAL_EMU_BIND', '0.0.0.0'))
+    ap.add_argument('--https', type=int, default=int(os.environ.get('GCAL_EMU_HTTPS_PORT', 0)),
+                    help="also serve routes over XP-era TLS on this port (0=off); ClientLogin is HTTPS")
+    ap.add_argument('--cert', default=os.environ.get('GCAL_EMU_CERT', 'certs/xp-google.crt'))
+    ap.add_argument('--key',  default=os.environ.get('GCAL_EMU_KEY',  'certs/xp-google.key'))
     ap.add_argument('--scenario', help="seed scenario, e.g. calendar=none,mail=error")
     ap.add_argument('--no-pop', action='store_true', help="skip the POP3 server")
     args = ap.parse_args(argv)
@@ -308,6 +330,10 @@ def main(argv):
     httpd = ThreadingHTTPServer((args.bind, args.http), Handler)
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
     t.start()
+    if args.https:
+        httpsd = make_https(args.bind, args.https, args.cert, args.key)
+        threading.Thread(target=httpsd.serve_forever, daemon=True).start()
+        log(f"HTTPS (XP-era TLS1.0+SHA1) on {args.bind}:{args.https}  cert={args.cert}")
     pop = None
     if not args.no_pop:
         pop = ThreadingPOP3((args.bind, args.pop), POP3Handler)

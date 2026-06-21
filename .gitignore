@@ -25,6 +25,11 @@ __pycache__/
 *.pyc
 .venv/
 
+# gcal-emu runtime artifacts (generated; certs/ ARE tracked — throwaway fixtures)
+/tools/gcal-emu/gcal-emu.log
+/tools/gcal-emu/scenario.conf
+/tools/gcal-emu/certs/*.pfx
+
 # Editor / OS
 *.swp
 *~

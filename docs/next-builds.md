@@ -22,11 +22,15 @@ Both are wslop-side to write; the one-shot boot-loop (below) is in place to test
 Make the launcher's calendar (and mail) speech bubbles fire on command, to verify every translated
 bubble renders + check overflow. Later: a real local calendar backend ("proxy to a local thing").
 
-**Protocol the launcher speaks** (RE'd from `gcalcore.dll` / `gcal.exe` / `Launch.exe` — all **WinINet over
-plain `http://` to `www.google.com`**, 2007 ClientLogin + GData Atom; **NO HTTPS** → a hosts redirect +
-a plain HTTP server suffice, no cert):
-- `POST /accounts/ClientLogin`  body `Email=%s&Passwd=%s&service=cl&source=sygnas-gcal-0.1`
-  → respond `SID=x\nLSID=x\nAuth=<token>\n` (it only reads `Auth=`).
+**Protocol the launcher speaks** (RE'd from `gcalcore.dll` / `gcal.exe` / `Launch.exe`; WinINet, host
+`www.google.com`, 2007 ClientLogin + GData Atom). ⚠️ **CORRECTED 2026-06-22 by live-test (see
+`re-notes.md` §Session 2): ClientLogin is HTTPS, the feeds are plain HTTP.** The session-1 "all plain
+`http://`, no cert" was wrong — gcal.exe opens TLS for the login (WinINet **12157 = secure-channel
+error** when it can't), period-correct for 2007 Google. So the emulator needs **HTTPS on :443 for
+ClientLogin** (self-signed `www.google.com` cert, **XP-trusted**, **XP-SP3-era TLS** = TLS1.0 + AES-CBC),
+plus the **HTTP feeds** (already built + working):
+- `POST https://www.google.com/accounts/ClientLogin`  body `Email=%s&Passwd=%s&service=cl&source=sygnas-gcal-0.1`
+  → respond `SID=x\nLSID=x\nAuth=<token>\n` (it only reads `Auth=`). **← the one open piece (HTTPS).**
 - every feed request carries header `Authorization: GoogleLogin auth=<token>`.
 - `GET http://www.google.com/calendar/feeds/default/allcalendars/full` → Atom calendar **list**
   (an `<entry>` with the calendar `<title>` + a `<link href=…>` to the event feed; parser also reads `gCal:color`).
@@ -127,5 +131,17 @@ to go live.** Calendar-only (POP3 can't be Caddy-fronted → mail deferred).
 own XP box (`hosts www.google.com → 127.0.0.1`) to enjoy the mascots' calendar/mail with no Google account
 — so it must be **native (no Python on XP)**: the protocol is tiny (HTTP/1.0 + POP3) → a small Win32 C
 build (mingw-w64, XP subsystem) is the target, written with confidence from the confirmed wire format +
-whatever the request logger captures on the first real run. Pair with the probe's **optional live agent**
-(portable sshd on XP) to read logs + iterate **without** the cold-loop reboot.
+whatever the request logger captures on the first real run.
+
+## ✅ Session 2 (2026-06-22) — live-tested; one open piece (HTTPS ClientLogin)
+- **Live-control infra built + proven** (the "optional live agent", done — details in the probe README):
+  a tiny **curl agent `xphttpd`** on XP (runs as Administrator in the interactive session → real
+  screenshots) + **`netexec`/SMB** for clean deploys. The Bitvise-sshd idea was a dead end (deep config
+  rabbit hole) → replaced. This is what made the live recon possible, **no cold-loop reboots**.
+- **gcal-emu reachable from XP** (`code` deployed; hosts-redirect verified; gcal.exe launches + prompts
+  for an account; the **HTTP feeds are ready**).
+- **⛔ Open piece — HTTPS ClientLogin (see the corrected protocol above + `re-notes.md` §Session 2):**
+  gcal.exe does **TLS** for `/accounts/ClientLogin` (12157). Build an HTTPS `:443` endpoint for
+  `www.google.com` with an **XP-trusted self-signed cert + XP-SP3 TLS** (TLS1.0/AES-CBC). Then the feeds
+  follow → the Serif bubbles fire. Ghidra-xref the JP error string in `gcalcore.dll` to pin whether the
+  cert must be trusted vs cert-errors-ignored.

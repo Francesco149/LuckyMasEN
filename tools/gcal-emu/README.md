@@ -6,9 +6,12 @@ real Google account. Stdlib Python 3, one process: an HTTP server (ClientLogin +
 plus a tiny POP3 server. Protocol RE'd from the binaries; full notes in
 [`../../docs/next-builds.md`](../../docs/next-builds.md) §"Build 1".
 
-The launcher reaches us because XP's `hosts` redirects `www.google.com` → this host. Everything is
-plain **`http://` on port 80** (the client is HTTP/1.0, no TLS) → a hosts redirect + this server
-suffice; **no cert**.
+The launcher reaches us because XP's `hosts` redirects `www.google.com` → this host. The **GData feeds
+are plain `http://` on :80** (this server). ⚠️ **CORRECTED 2026-06-22 by live-test: `/accounts/ClientLogin`
+is HTTPS** — gcal.exe opens TLS for the login (WinINet `12157` secure-channel error otherwise). So a full
+run also needs an **HTTPS `:443` endpoint** for `www.google.com` with an **XP-trusted self-signed cert +
+XP-SP3-era TLS** (TLS1.0 + AES-CBC) — **not yet built** (this server is HTTP-only). Details:
+[`../../docs/re-notes.md`](../../docs/re-notes.md) §Session 2.
 
 ## Bubbles ↔ scenarios
 

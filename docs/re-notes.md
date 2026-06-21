@@ -125,3 +125,41 @@ qemu/xdelta3/python-construct-lief-pillow) available.
   `C:\retro-kit\chipset-inf\`. Pending the owner's single reboot to test both.
 - **Still open:** PE-resource UI strings (lief), `Launch.ini` titles + wallpaper HTML (trivial), the
   `.nut`/`.mink` codecs, route A/B lock-in, wine/QEMU loop.
+
+---
+
+## 2026-06-22 — Session 2: live-test the calendar path → **protocol correction (ClientLogin = HTTPS)**
+
+Built the `tools/gcal-emu/` test-board (session 1) and stood it up to actually drive the launcher's
+calendar against it. The enabling infra (in `retro-hardware/projects/xp-remote-probe/`) turned into the
+real story; the LuckyMas-relevant findings:
+
+- **gcal-emu hosted + reachable.** Runs on the always-on `code` box behind Caddy (`http://www.google.com`
+  vhost → `gcal-emu` on :8091); XP's `hosts` redirects `www.google.com` → `code` (verified: XP
+  `ping www.google.com` → `10.0.10.53`). gcal.exe **launches + prompts for a Google account**; the
+  seeded `gcal.ini` wasn't in the format it reads, so it shows the login dialog (fine — any creds work
+  against the emulator).
+- **🔧 PROTOCOL CORRECTION — ClientLogin is HTTPS, not plain HTTP.** On submitting (bogus) credentials,
+  gcal.exe errors with WinINet **12157 = `ERROR_INTERNET_SECURITY_CHANNEL_ERROR`** (a JP "secure channel"
+  dialog) — i.e. it opens a **TLS** connection for `/accounts/ClientLogin` and the handshake fails (our
+  `code:443`/Caddy has no `www.google.com` cert + no XP-era TLS). The session-1 note "all WinINet over
+  plain `http://`, NO HTTPS → no cert" was **half-wrong**: the scheme isn't a string in the binary
+  (WinINet sets it via a flag/port at runtime — `INTERNET_FLAG_SECURE`/443), so strings-recon couldn't
+  see it. Period-correct: Google's 2007 ClientLogin was **HTTPS-only** (credentials over TLS); the
+  **GData feeds stay plain HTTP** (their URLs ARE literal `http://…` in `gcalcore.dll`). Real shape =
+  **HTTPS login + HTTP feeds**.
+  - *RE to pin it (next session, Ghidra):* the dialog's **JP error string** is gcal.exe's own — find it
+    in `gcalcore.dll`/`gcal.exe` (wide strings) and xref it; the code just above is the failed
+    `InternetConnect`(443)/`HttpOpenRequest`(`INTERNET_FLAG_SECURE`) for ClientLogin → reveals whether it
+    validates the cert (⇒ must install our CA in XP's root) or ignores cert errors (⇒ self-signed is
+    enough), and the exact TLS/cipher it asks for.
+- **⇒ Next step (the open build):** give the emulator an **HTTPS `/accounts/ClientLogin` on :443** with
+  (a) a self-signed `www.google.com` cert **installed in XP's Trusted Root store**, and (b) **XP-SP3-era
+  TLS** (TLS 1.0 + AES-CBC/3DES — XP can't do modern TLS, and `code`'s Caddy has neither the cert nor the
+  old ciphers). Then the feeds (already working over HTTP) should follow → the Serif bubbles fire.
+- **Live-control infra built (reusable, not LuckyMas-specific):** a tiny curl-driven agent on XP
+  (`xphttpd`, runs as Administrator, real interactive screenshots) + `netexec`/SMB for clean deploys —
+  see `retro-hardware/projects/xp-remote-probe/`. This is what made the live recon possible (the Bitvise
+  SSH route was a dead end). nircmd does **not** actually hang as Administrator (the session-1 "hang" was
+  a Startup-batch context artifact); but nircmd with **no/garbled args pops a modal** that wedges a
+  single-threaded caller — that DID look like the hang.

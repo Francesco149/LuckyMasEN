@@ -24,8 +24,12 @@ suffice; **no cert**.
 
 ## Run
 
+> ⚠️ **Run on a SEPARATE always-on LAN box, not the Time Machine courier** — that box runs one OS at
+> a time, so its NixOS is offline while XP is booted (and XP reuses its NIC/lease). Needs **port 80
+> free**; XP's hosts points `www.google.com` at *this* box's IP.
+
 ```sh
-# courier (always-on LAN, default): bind :80 + :110 (needs root for :80)
+# the emulator host (separate always-on LAN box): bind :80 + :110 (needs root for :80)
 sudo python3 gcal_emu.py --scenario calendar=schedule,mail=check
 
 # unprivileged self-test
@@ -44,9 +48,10 @@ Knobs (env or `scenario.conf`, `key=value`): `calendar`, `mail`, `mailcount`, `e
 
 ## XP side — point the launcher at the board
 
-1. `C:\WINDOWS\system32\drivers\etc\hosts` → add `10.0.10.115  www.google.com` (the courier).
-   ⚠️ This also blackholes *real* google.com browsing on XP — fine for a retro box; remove the line
-   to restore. (`10.0.10.115` = `timemachine`; DHCP, re-check.)
+1. `C:\WINDOWS\system32\drivers\etc\hosts` → add `<emu-host-ip>  www.google.com` (the separate box
+   running this emulator — **not** the timemachine, which *is* XP while XP runs). The probe's
+   `xp-probe.sh hosts on <ip>` does this for you. ⚠️ Also blackholes *real* google.com browsing on XP —
+   fine for a retro box; remove the line to restore.
 2. The launcher's right-click menu: `(&M)` = Mail check, `(&C)` = Calendar check.
 3. Calendar account: `…\launcher\gcal.ini` needs a non-blank GCal ID (any value) or you get
    `SerifCallenderNoAccount` before any server call. Blank it on purpose to test that bubble.

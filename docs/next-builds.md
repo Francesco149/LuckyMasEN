@@ -51,8 +51,10 @@ a plain HTTP server suffice, no cert):
 server, with a **scenario selector** (env var / control file / path) to choose the response set and thus the
 bubble. **First-cut + a request LOGGER**, so the first real-XP run captures the exact event-feed URL/params +
 the XML the parser actually needs, then we lock the responses. Redirect: XP `hosts` `www.google.com →
-<courier-LAN-IP>` (⚠️ also blackholes real google.com browsing on XP — fine for a retro box; toggle when
-testing). Run on the **courier** (always-on LAN) by default.
+<emu-host-IP>` (⚠️ also blackholes real google.com browsing on XP — fine for a retro box; toggle when
+testing). **⚠️ corrected: run on a SEPARATE always-on LAN box, NOT the courier** — the Time Machine runs
+one OS at a time, so its NixOS courier is offline while XP is booted (and XP reuses its NIC/lease, so the
+courier IP would loop back to XP). Needs port 80 free.
 
 ## Build 2 — XP remote probe (screen capture + push) — cold-loop
 Push files to XP + observe (screenshots) with no physical access, driven from the courier. Robust design
@@ -101,7 +103,8 @@ add-event `…/calendar/event?action=TEMPLATE&dates=%4d%02d%02d/…`.)
 - **Build 1 — gcal-emu** → `LuckyMasterEN/tools/gcal-emu/` (`gcal_emu.py` + README). Stdlib HTTP
   (ClientLogin + both Atom feeds) + POP3, scenario selector (env + control file re-read per request →
   flip bubbles live) + a verbatim request LOGGER. **Self-tested on every scenario** (curl + a POP3
-  client): schedule/none/error, mail check/none/error/refuse. Runs on the courier (`python3` 3.12 in PATH).
+  client): schedule/none/error, mail check/none/error/refuse. ⚠️ **runs on a SEPARATE always-on LAN box,
+  not the courier** (the courier IS XP while XP runs); needs port 80 free + on the `10.0.10.x` LAN.
 - **Build 2 — XP remote probe** → `retro-hardware/projects/xp-remote-probe/` (`courier/xp-probe.sh` +
   `xp/*.cmd|.reg` + README). Deployed to `courier:/root/xp-remote-probe/`; NirCmd staged to the kit
   (`xp/probe/nircmd.exe`, 32-bit verified). **Validated on the real cold disk (no reboot):** UUID mount

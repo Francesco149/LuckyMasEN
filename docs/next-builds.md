@@ -67,8 +67,8 @@ that reuses the proven cold-mount + boot-loop and needs **no live network agent*
 **Pieces to stage (all offline-installable now while XP is cold):**
 - **NirCmd** — NOT in the kit; fetch from nircmd.com (Playwright if the DL is gated) → `C:\probe\nircmd.exe`.
 - **Autologon** — SOFTWARE hive `…\Microsoft\Windows NT\CurrentVersion\Winlogon`: `AutoAdminLogon=1`,
-  `DefaultUserName=Administrator`, `DefaultPassword=…`. ⚠️ **TODO: check if Administrator has a password**
-  (the owner has been logging in; if there's a password, set DefaultPassword to it or clear it).
+  `DefaultUserName=Administrator`, `DefaultPassword=…`. ✅ **Resolved 2026-06-21: Administrator password is
+  BLANK** (offline `samdump2` → NT hash `31d6…089c0`; owner-confirmed) → leave `DefaultPassword` empty.
 - **Startup orchestrator** — a batch in `…\Documents and Settings\All Users\Start Menu\Programs\Startup\`
   that, **only when a flag file exists** (so normal boots aren't hijacked), runs `C:\probe\task.cmd` (dropped
   by the courier) + screenshots + reboots.
@@ -90,3 +90,25 @@ orchestrator → live SFTP+exec on running XP (no reboot per change). Defer unti
   install from `C:\retro-kit\chipset-inf\`, or it's a *different* undriven device (iGPU/xHCI → BIOS-disable). Deferred.
 - **Open LuckyMas TL surface:** PE-resource UI strings (dialogs/menus/string-tables, lang 1041 → `lief`),
   `Launch.ini` titles + wallpaper HTML (trivial text); then route A/B lock-in.
+
+## ✅ Built 2026-06-21 (both builds, this session)
+Wire format **confirmed from the binaries** (extracted the UTF-16LE strings — the build is MFC-Unicode
+WinINet): `POST /accounts/ClientLogin` `Email=%s&Passwd=%s&service=%s&source=%s` → `Auth=`; `GET
+/calendar/feeds/default/allcalendars/full` → Atom list w/ a `<link href=>` event feed; the feed reads
+`gd:when@startTime`/`gd:where`/`title`; mail = POP3 `USER/PASS/STAT`. (`gcal.ini`/`gcal.dat` configs;
+add-event `…/calendar/event?action=TEMPLATE&dates=%4d%02d%02d/…`.)
+
+- **Build 1 — gcal-emu** → `LuckyMasterEN/tools/gcal-emu/` (`gcal_emu.py` + README). Stdlib HTTP
+  (ClientLogin + both Atom feeds) + POP3, scenario selector (env + control file re-read per request →
+  flip bubbles live) + a verbatim request LOGGER. **Self-tested on every scenario** (curl + a POP3
+  client): schedule/none/error, mail check/none/error/refuse. Runs on the courier (`python3` 3.12 in PATH).
+- **Build 2 — XP remote probe** → `retro-hardware/projects/xp-remote-probe/` (`courier/xp-probe.sh` +
+  `xp/*.cmd|.reg` + README). Deployed to `courier:/root/xp-remote-probe/`; NirCmd staged to the kit
+  (`xp/probe/nircmd.exe`, 32-bit verified). **Validated on the real cold disk (no reboot):** UUID mount
+  guard, case-insensitive resolver, install, status, `hosts on|off`, `autologon on|off` (readback via
+  `hivexregedit --export`; `hivexget` isn't exposed by `nix shell nixpkgs#hivex`), and `check-admin`.
+  Disk left clean (autologon off, no redirect, no flag).
+
+**One open step:** the first full cold-loop `arm → reboot → collect` (reboots the box into XP). Gated on
+an owner go-ahead. Recommended first run **owner-supervised** (skip autologon, log in by hand once);
+enable autologon for hands-off runs after the loop is proven. Runbook → the probe README.

@@ -115,3 +115,17 @@ add-event `…/calendar/event?action=TEMPLATE&dates=%4d%02d%02d/…`.)
 **One open step:** the first full cold-loop `arm → reboot → collect` (reboots the box into XP). Gated on
 an owner go-ahead. Recommended first run **owner-supervised** (skip autologon, log in by hand once);
 enable autologon for hands-off runs after the loop is proven. Runbook → the probe README.
+
+### Hosting + the XP-local direction (2026-06-21)
+The emulator can't run on the Time Machine courier (it *is* XP during the run), so it's wired onto the
+**`code` box behind its Caddy**: `nix-lab/hosts/code/gcal-emu.nix` (a localhost service on
+`lab.ports.gcal-emu`=8091) + a plain-HTTP `http://www.google.com` Caddy vhost → it. XP's hosts redirect
+points `www.google.com → 10.0.10.53` (`code`). Committed + eval/Caddyfile-validated; **needs `deploy .#code`
+to go live.** Calendar-only (POP3 can't be Caddy-fronted → mail deferred).
+
+**Build 3 (future, owner-requested):** a **user-friendly XP-local** emulator the end user runs on their
+own XP box (`hosts www.google.com → 127.0.0.1`) to enjoy the mascots' calendar/mail with no Google account
+— so it must be **native (no Python on XP)**: the protocol is tiny (HTTP/1.0 + POP3) → a small Win32 C
+build (mingw-w64, XP subsystem) is the target, written with confidence from the confirmed wire format +
+whatever the request logger captures on the first real run. Pair with the probe's **optional live agent**
+(portable sshd on XP) to read logs + iterate **without** the cold-loop reboot.

@@ -195,6 +195,29 @@ keyset), and the SMB-exec-not-the-agent operating rule → [`re-notes.md`](re-no
 
 **Remaining:** (A) ✅ **embedded-Lua migration DONE + validated** (same session) — Lua 5.4 statically linked,
 all request logic in `gcalsrv.lua` (C keeps sockets+Schannel+POP3+framing); re-tested on XP, byte-identical to
-the C version. Next under this: a real local-calendar backend (script edit). (B) the final end-to-end: drive
-the real `gcal.exe`/launcher → fire the `SerifCallender*`/`SerifMail*` bubbles (server side done; launcher-render
-validation, needs GUI driving). (C) unattended cert install (certutil/registry, no modal) + first-run installer.
+the C version. Next under this: a real local-calendar backend (script edit). (B) ✅ **end-to-end DONE** —
+drove the real launcher, captured `SerifCallenderSchedule` + `SerifCallenderNone` (→ `docs/screenshots/`,
+README gallery; findings in `re-notes.md` §Session 4). (C) unattended cert install + first-run installer.
+
+## ▶ Next session (post-/clear): host→localhost patch + finish the translation
+Owner will be **present for live UI testing** (drive the launcher by hand — much faster than blind nircmd
+automation). Server side is done + validated; this phase is the patch + the rest of the text.
+
+1. **Patch the host `www.google.com` → `localhost`** so XP keeps real internet (no `hosts` blackhole). The host
+   is a **wide (UTF-16LE) string in `gcalcore.dll`** (confirmed via `strings -e l`); `localhost` (9) ≤
+   `www.google.com` (14) → in-place patch, NUL-pad the tail. ⚠️ **The embedded cert is `CN=www.google.com`** —
+   if the client connects to `localhost`, WinINet's TLS CN check fails. So **regenerate the cert as
+   `CN=localhost`** (+ SAN `127.0.0.1`) in `make-xp-cert.sh`, re-run `embed-pfx.sh`, rebuild. (Or test first
+   whether gcal ignores cert errors — if so, host patch alone suffices.) Then drop the `hosts` line. RE the
+   exact `InternetConnect`/URL construction in `gcalcore.dll` to confirm host vs full-URL strings before patching.
+2. **Finish the EN translation surface** (RE order from `re-notes.md` §Session 1): PE-resource UI strings
+   (dialogs/menus/string-tables, lang 1041 → `lief`) in the four exes + the 4 `.scr`; `Launch.ini` `Title###`
+   + `MinkIt.ini` + the wallpaper HTML + `お読みください.txt` (trivial text). The launcher serifs are already
+   done (`patch/launcher/*.ini`). Calc `.nut` strings are behind an un-cracked codec (deferred).
+3. **POP3 mail bubble** — `Launch.ini` `[Mail]` is empty (`Client=`, `Boot=0`); needs a configured POP3
+   client/host to drive `SerifMail*` against gcalsrv :110. RE how Launch.exe builds the POP3 host.
+4. Silent (no-modal) cert install (certutil/registry) + a one-click first-run installer (hosts + Startup).
+
+XP driving recap (CLAUDE.md): commands via **SMB-exec** (`nix run nixpkgs#netexec` from `code`); GUI launch via
+`nircmd exec show <fullpath>` (the agent wedges on `start`); **screenshots via PrtScn→clipboard** (the mascot is
+a layered window `nircmd savescreenshotfull` can't capture). Driver: `tools/gcal-xp/test/lm.cmd`.

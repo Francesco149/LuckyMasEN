@@ -44,6 +44,14 @@ lease). Reach XP directly:
 
 **When NixOS is booted:** `ssh root@timemachine.soy` (key auth `headpats@cutestation`).
 
+**Driving the XP GUI** (screenshots / clicking the launcher): only the **agent** sees the interactive desktop
+(wmiexec/SMB runs session-0-blind). Launch GUI apps via **`nircmd exec show <fullpath>`** — the single-threaded
+agent **wedges** if you use `start` and the GUI holds its stdout pipe. **Screenshot via PrtScn→clipboard**
+(`nircmd sendkeypress 0x2c` then `nircmd clipboard saveimage`): the mascot is a per-pixel-alpha **layered
+window** that `nircmd savescreenshotfull` (BitBlt) renders as bare desktop. JP install path breaks cmd
+`start`/`cd` → work from an ASCII copy. The **owner is fastest for live UI testing** — loop them in rather than
+automating blindly. Driver helper: `tools/gcal-xp/test/lm.cmd`.
+
 ## Boot loop (NixOS ⇄ XP) — recoverable
 - Default boot = NixOS. **Flip into XP:** on the courier run `/root/boot-xp-once.sh`
   (`grub-reboot "Windows XP (Crucial)"` + `systemctl reboot`). Boots XP **exactly once**; any XP

@@ -50,7 +50,9 @@ agent **wedges** if you use `start` and the GUI holds its stdout pipe. **Screens
 (`nircmd sendkeypress 0x2c` then `nircmd clipboard saveimage`): the mascot is a per-pixel-alpha **layered
 window** that `nircmd savescreenshotfull` (BitBlt) renders as bare desktop. JP install path breaks cmd
 `start`/`cd` → work from an ASCII copy. The **owner is fastest for live UI testing** — loop them in rather than
-automating blindly. Driver helper: `tools/gcal-xp/test/lm.cmd`.
+automating blindly. Driver helpers: **`tools/deploy-xp.sh`** (the full deploy+drive recipe — SMBv1/**NT1**
+or smbclient times out; blank-Administrator auth; **agent vs SMB-exec** split; **kill+del before
+overwrite**; hosts via pull/filter/push; the protected-root cert modal) + `tools/gcal-xp/test/lm.cmd`.
 
 ## Boot loop (NixOS ⇄ XP) — recoverable
 - Default boot = NixOS. **Flip into XP:** on the courier run `/root/boot-xp-once.sh`
@@ -84,6 +86,17 @@ so the mascots' calendar/mail work with no Google account:
 - **`tools/gcal-emu/gcal_emu.py`** is the protocol **oracle** (Python; retired as a deployed host,
   kept as the reference for the exact responses). Wire format + bubble↔scenario table:
   `docs/next-builds.md` §"Build 1"/§"Session 3".
+
+## The reproducible patch (`patch/manifest.toml` + `tools/build_patch.py`)
+Every file we patch goes through ONE pipeline → spec in `docs/patch-system.md`. `manifest.toml` is the
+single source of truth (one entry per file + op + note; `active=false` = recorded-but-deferred);
+`build_patch.py` mirrors `originals/installed/`→`out/patched/` (gitignored), applies ops, writes
+`PATCH-LOG.txt`. Ops: `xvi`/`text_keys`/`text_subst`/`text_file`/`binpatch`/`rename`. Reproducible.
+End goal = **English installer re-wrapped from the user's own `setup.exe`** (ISCC under wine; consumes
+`out/patched/`). **Locale rule** (goal #2): app-read text (Launch.ini, `.Xvi` serifs via `*A` APIs) =
+**pure ASCII**; readme = UTF-8+BOM; HTML = UTF-8. **host→localhost** done in `gcalcore.dll`+`gcal.exe`
+(binpatch) + cert CN=localhost — drop the XP `hosts` line; the deferred `.mink`/`.scr`/path renames
+activate with the installer stage.
 
 ## Conventions
 - Persist cross-session **orientation in this CLAUDE.md**; the running RE/build narrative in

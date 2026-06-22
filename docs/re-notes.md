@@ -270,3 +270,63 @@ screenshotted the mascot bubbles (→ `docs/screenshots/`, README gallery). `gca
 **Remaining:** silent (no-modal) cert install + first-run installer; patch `gcalcore.dll`'s host string
 (wide `www.google.com`) → `localhost` so the redirect doesn't blackhole real Google; finish the EN text +
 PE-resource strings; the POP3 mail bubble (Launch.ini `[Mail]` needs a configured POP3 client/host).
+
+---
+
+## 2026-06-22 — Session 5: reproducible patch system + translation wins + host→localhost
+
+Owner-directed: make patching **reproducible + tracked** (one auditable pipeline, building toward an
+**English installer re-wrapped from the user's own `setup.exe`**), and continue the handoff. Architecture
+→ [`patch-system.md`](patch-system.md).
+
+- **Built the patch pipeline.** `patch/manifest.toml` (declarative single-source-of-truth: every patched
+  file + op + note) + `tools/build_patch.py` (mirrors `originals/installed/` → `out/patched/`, applies ops,
+  writes `PATCH-LOG.txt`). Ops: `xvi` / `text_keys` / `text_subst` / `text_file` / `binpatch` / `rename`;
+  `active=false` records intent without applying. **Reproducible** (two builds hash-identical) and the 22
+  `.Xvi` round-trip (selftest 22/0). The launcher repack is now pipeline-driven, not a manual step.
+- **Translation wins (display text):** `Launch.ini` menu titles, the readme (お読みください.txt), and the
+  wallpaper picker UI — all English.
+- **🔑 Locale-safety rule (project goal #2).** App-read text goes through ANSI APIs
+  (`GetPrivateProfileStringA`, `DrawTextA`) → non-ASCII mojibakes on a non-JP box. So **app-read text must be
+  pure ASCII** ("Lucky Star", not "Lucky☆Star"); Notepad-only text (readme) → **UTF-8 + BOM** (XP Notepad
+  honours it on any locale, keeps ☆/×); HTML → UTF-8 (meta charset). The `.Xvi` serifs still carry a few `☆`
+  → ASCII pass is a follow-up. File paths (`らき☆マス`, JP `.mink`/`.scr`) must become ASCII too → tracked
+  deferred (needs the install at the ASCII path, which the installer pins).
+- **🔧 host→localhost — RE correction to the handoff.** The wide host string is in **both binaries**, not
+  just `gcalcore.dll`:
+  - `gcalcore.dll` ×2: bare `www.google.com` + the `http://www.google.com/.../allcalendars/full` URL.
+  - `gcal.exe` ×3: same two **plus** the browser add-event deep-link
+    (`…/calendar/event?action=TEMPLATE&dates=…`).
+  - `Launch.exe`: only bare `google`/`POP3` *labels* — no connectable host (POP3 host comes from
+    `Launch.ini [Mail]`, deferred).
+  All MFC-Unicode WinINet → wide only. `binpatch` replaces each **complete NUL-terminated** string
+  (`www.google.com\0\0` matches the bare host, not the substring inside the URLs), writing the shorter
+  `localhost` in place + zero-padding the freed tail → **size unchanged, PE valid**. After this the XP
+  `hosts` line is dropped (real Google browsing restored).
+- **Server side matched:** `gcalsrv.lua` now returns a **`localhost`** event-feed link (works for both the
+  byte-patch and the legacy hosts-redirect, since localhost always → 127.0.0.1), and the embedded cert is
+  regenerated **CN=localhost** (SAN `localhost,127.0.0.1,www.google.com,google.com,*.google.com` so the
+  legacy path still validates). `gcalsrv.exe` rebuilt (XP-only imports ✓); `clientlogin.vbs` now defaults to
+  `https://localhost/...`.
+- **Deferred + recorded** (flip `active=true` once RE-confirmed): Launch.ini install-root path rewrite;
+  `.mink` (10) / `.scr` (4) / wallpaper-JPG renames; `MinkIt` copy-engine path config (no INI ships →
+  RE where it reads its folder); `autorun.inf`; PE-resource UI strings (lang 1041).
+
+**✅ Live test PASSED on real XP (10.0.10.113), owner-driven.** Deployed via the new
+[`tools/deploy-xp.sh`](../tools/deploy-xp.sh) — which captures the recipe (SMBv1/**NT1** or smbclient
+just times out; blank-Administrator auth; **agent vs SMB-exec** split; **kill+del before overwrite** or
+SHARING_VIOLATION; hosts via **pull/filter/push**, not cmd redirection; the protected-root cert modal;
+layered-window screenshots via PrtScn). Patched launcher → `C:\lm`, rebuilt `gcalsrv.exe` → `C:\gcal-xp`,
+hosts line dropped. Validated: WinINet **ClientLogin TLS → localhost** (STATUS=200, `Auth=`), allcalendars
++ event feed (200), the EN **SerifCallenderSchedule** bubble rendered hiyori's served events (re-fires on
+manual check), and **google.com is still reachable** (real internet intact — the byte-patch replaced the
+hosts blackhole). Cert trust = one owner click on the protected-root modal (XP has no certutil for a
+silent install). The stale `gcalsrv.c` log line now reads the cert CN instead of hardcoding it.
+- **Working:** the calendar bubble + the **left-click app list** (EN `Title###`).
+- **🎯 Still JP = PE-resource strings in `Launch.exe` (lang 1041) — the next translation stage (`pe-res`
+  op), precisely scoped by the owner's live test:** the **right-click main menu** (settings/exit/calendar
+  + mail check), the **per-app item context menu** (`(&T)`/`(&D)` = rename/delete → `IDR_ITEMMENU`), and
+  the **pin/hold arrow tooltip** (bottom-right — confirm PE-resource string vs hardcoded).
+
+**Remaining:** PE-resource TL (the menus/tooltip above + the rename dialogs `APPNAMEDLG`/`NEWNAMEDLG`); the
+`.Xvi` ASCII pass; the POP3 mail bubble; then the **installer re-wrap** (ISCC under wine).

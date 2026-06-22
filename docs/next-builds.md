@@ -221,3 +221,39 @@ automation). Server side is done + validated; this phase is the patch + the rest
 XP driving recap (CLAUDE.md): commands via **SMB-exec** (`nix run nixpkgs#netexec` from `code`); GUI launch via
 `nircmd exec show <fullpath>` (the agent wedges on `start`); **screenshots via PrtScn→clipboard** (the mascot is
 a layered window `nircmd savescreenshotfull` can't capture). Driver: `tools/gcal-xp/test/lm.cmd`.
+
+## ✅ Session 5 (2026-06-22) — reproducible patch system + translation wins + host→localhost
+Owner-directed pivot in *method*: every patch now flows through one reproducible, audited pipeline, building
+toward the chosen deliverable — an **English installer re-wrapped from the user's own `setup.exe`**.
+Architecture → [`patch-system.md`](patch-system.md); RE detail → [`re-notes.md`](re-notes.md) §Session 5.
+
+- **Pipeline built:** `patch/manifest.toml` (what we patch) + `tools/build_patch.py` (mirror
+  `originals/installed/`→`out/patched/`, apply ops, emit `PATCH-LOG.txt`). Reproducible; 22 `.Xvi` selftest 22/0.
+- **Translated (display text):** Launch.ini menu titles, the readme, the wallpaper picker UI. Locale-safety
+  rule applied (app-read text = pure ASCII; readme = UTF-8+BOM; HTML = UTF-8).
+- **host→localhost DONE (build side):** `binpatch` rewrote the wide host in **both** `gcalcore.dll` (×2) and
+  `gcal.exe` (×3, incl. the add-event deep-link) — whole NUL-terminated strings, size-preserving. Server
+  matched: `gcalsrv.lua` localhost event-feed link + cert regenerated **CN=localhost** (+SAN); `gcalsrv.exe`
+  rebuilt; `clientlogin.vbs` now defaults to localhost.
+- **Deferred + recorded** (flip `active=true` later): install-root path rewrite, `.mink`/`.scr`/JPG renames,
+  MinkIt copy-path, autorun, PE-resource strings.
+
+### ▶ Live test runbook (owner-driven — loop in the owner for the GUI)
+Box is in XP (SMB-exec from `code`) or NixOS (cold-mount by UUID). Deploy from `out/patched/`:
+1. Copy the patched launcher (`out/patched/app/launcher/*` — patched `gcalcore.dll` + `gcal.exe` + EN `.Xvi`
+   + `Launch.ini`) to the install (or `C:\lm` via `lm.cmd setup`), and the rebuilt `tools/gcal-xp/gcalsrv.exe`
+   to `C:\gcal-xp\`.
+2. **Remove the `www.google.com` line from `C:\WINDOWS\system32\drivers\etc\hosts`** (the whole point — no
+   blackhole). `localhost` already resolves to 127.0.0.1.
+3. Start `gcalsrv.exe` (installs the CN=localhost cert into Root on first run — owner OKs the protected-root
+   modal once, or use a silent install; see Session 4 notes).
+4. Headless TLS check: `cscript //nologo C:\gcal-xp\clientlogin.vbs` → expect `URL=https://localhost/...`,
+   `STATUS=200`, `Auth=EMU_TEST_TOKEN` (proves localhost TLS + the new cert is trusted).
+5. Launch the launcher → right-click → Calendar check → the **`SerifCallenderSchedule`** bubble fires reading
+   from localhost. Confirm: English menu titles; real google.com still browsable in IE (no blackhole).
+
+### Next major stage — English installer re-wrap
+Consume `out/patched/`: `innoextract` the user's own `setup.exe` → drop in the patched tree → translate the
+Inno script/UI (`[Languages]` + custom messages) + pin an English `{app}` path (`…\SYGNAS\LuckyMas`) →
+recompile with **ISCC under wine** → an English `setup.exe`. Adds the Inno-compiler toolchain (not yet in the
+flake). This is where the deferred install-root rename + path rewrite activate.

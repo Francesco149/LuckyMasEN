@@ -3,14 +3,16 @@
 When the **xphttpd agent (`:8099`) is NOT running** but SMB is, this is how to deploy + drive the
 Time Machine from wslop using only **netexec** (exec) + **smbclient** (files). `tools/deploy-xp.sh`
 is the *agent-centric* recipe (its `probe`/`server`/`launch`/`shot`/`clientlogin` call the agent);
-this file is the fallback for everything that doesn't need the GUI. Validated 2026-06-22 (Session 8).
+this file now covers **everything — GUI included** (via `iexec`, §below) → the xphttpd agent is retired.
+Validated 2026-06-22 (Session 8 + the iexec session-1 addition).
 
 ## Box facts
 - **10.0.10.113** (DHCP floats `.113`/`.114`/`.115`), host `TIMEMACHINE-XP`, **SMBv1/NT1 only**.
 - **Administrator / BLANK password.** `(Pwn3d!)` on connect = auth OK.
 - wslop reaches it **directly** on the `10.0.10.x` LAN — no need to hop through `code`.
-- GUI / screenshots still need the **agent or the owner** (smbexec is session-0-blind; the mascot is a
-  layered window). Loop the owner in for visual checks — that's the fast path.
+- GUI / screenshots **no longer need the agent** — `iexec.exe` via `netexec --exec-method smbexec` runs
+  any GUI program on the interactive console desktop (see §"Session-1 GUI via iexec"). The mascot is a
+  per-pixel-alpha layered window → capture via **PrtScn→clipboard** (BitBlt/savescreenshotfull = bare desktop).
 
 ## The two channels
 ```sh
@@ -24,6 +26,24 @@ nix shell nixpkgs#samba -c smbclient '//10.0.10.113/C$' -U 'Administrator%' \
 smbclient tips: `prompt OFF` before `mput`; `lcd <localdir>` to set the local side; **always give `get`
 a local name** — `get "\path\file" name` — else you get a file literally named `\path\file`. Remote
 paths use backslashes; quote ones with spaces. The `Can't load /etc/samba/smb.conf` warning is harmless.
+
+## Session-1 GUI via iexec (retires the xphttpd agent)
+`iexec.exe` (`../retro-hardware/projects/xp-remote-probe/xp/iexec.c`, i686/XP) does
+WTSGetActiveConsoleSessionId → WTSQueryUserToken → CreateProcessAsUser(lpDesktop=`WinSta0\Default`) →
+launches a GUI child in the **logged-in console session** (visible on the real desktop). Prereqs: a
+console user logged in (autologon) + run as SYSTEM. Build: `iexec.c` header (mcfgthread fix like gcalsrv).
+```sh
+# MUST be --exec-method smbexec (→ LocalSystem). The DEFAULT method runs as Administrator →
+# "iexec: WTSQueryUserToken failed 1314". -w<secs> waits for the child (screenshots); omit -w for a
+# persistent GUI app (launcher/installer) → fire-and-forget. Stage iexec.exe + nircmd.exe in C:\probe\.
+nix run nixpkgs#netexec -- smb <ip> -u Administrator -p '' --exec-method smbexec \
+  -x 'C:\probe\iexec.exe -w8 C:\probe\nircmd.exe savescreenshotfull C:\probe\out\shot.png'
+# then smbclient-get C:\probe\out\shot.png.  Measure an Inno wizard: iexec winrect.exe -> C:\probe\out\wr.txt.
+```
+- **Layered mascot**: PrtScn→clipboard, still via iexec (clipboard is per-session):
+  `iexec … nircmd sendkeypress 0x2c` then `iexec … nircmd clipboard saveimage C:\probe\out\m.png`.
+- **Reboot** (the agent's `/reboot`): `nxc smb <ip> -x 'shutdown -r -t 3 -f'` (plain Administrator — no iexec).
+- Validated 2026-06-22 on TIMEMACHINE-XP: real desktop capture + Inno-wizard measurement via `winrect`.
 
 ## Getting command OUTPUT back reliably (the #1 gotcha)
 wmiexec's output retrieval is **flaky for inline complex commands** (`(...)`, `&`-chains, redirects →

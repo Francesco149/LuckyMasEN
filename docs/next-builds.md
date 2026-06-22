@@ -399,3 +399,42 @@ Currently targets **IS 5.6.1**; the `[Code]` wizard-resize was REMOVED (dead end
   4 `.nut.raw`** (Squirrel source behind a light byte-framing). JP = baked-image PNGs (`btn_mode_kansan` tab,
   `conv_select_type_paper2mm` + conversion labels, `conv_btn_conv/copy`, rightmost calc buttons) + `.nut`
   textbox/font. Translate PNGs + crack the `.nut` framing + repack via `sygnas_repack.py`.
+
+## ✅ Session 10 (2026-06-22) — agent RETIRED (session-1 smbexec) + FONT resolved + q9650 enabled
+Two owner asks: (1) the installer wizard font, (2) make SMB-exec drive the GUI so the hand-rolled xphttpd
+screenshot agent can retire. Both done; a 3rd front (q9650 as the no-PGothic test box) opened + mostly done.
+
+- **Agent RETIRED.** New `iexec.exe` (`../retro-hardware/projects/xp-remote-probe/xp/iexec.c`, i686/XP):
+  WTSGetActiveConsoleSessionId → WTSQueryUserToken → CreateProcessAsUser(lpDesktop=`WinSta0\Default`) runs
+  any GUI program on the **interactive console desktop** from SMB-exec. MUST run via `netexec --exec-method
+  smbexec` (→ LocalSystem; the default wmiexec method is Administrator → `WTSQueryUserToken 1314`). Proven on
+  TIMEMACHINE-XP (real desktop capture + Inno-wizard measurement). Full replacement: exec=`nxc -x` ·
+  files=smbclient · GUI+screenshots=`iexec` · reboot=`nxc -x 'shutdown -r -t N -f'`. Recipe →
+  `docs/xp-ops-cheatsheet.md` §"Session-1 GUI via iexec". This makes **autonomous GUI/UI testing** possible
+  (no owner, no agent) — used below to measure the font wizards.
+
+- **FONT RESOLVED — bundle MS PGothic** (no present font works). Measured every `[LangOptions]` variant
+  autonomously via iexec + a new `winrect.exe` (finds `TWizardForm`, prints GetWindowRect): PGothic-9 =
+  **586×364** (faithful); Tahoma 9/10/11/12/13 = 586×420 / 586×475 / 669×530 / 752×558 / 752×614 — **none
+  match** the wide-but-short 586×364 (PGothic's CJK metrics; no Latin font has that aspect ratio). **Bundle
+  delivery PROVEN** via a proxy test (DejaVu Sans Mono, absent on XP): 503×392 un-bundled vs **586×420** when
+  bundled + `AddFontResource(ttf)` in `[Code] InitializeSetup` → the bundled font IS available for wizard
+  scaling. So bundle `msgothic.ttc` + AddFontResource it in InitializeSetup → faithful 586×364 on any XP.
+  ⚠️ The app's runtime serifs (`ＭＳ Ｐゴシック` facename) ALSO need PGothic on no-lang-pack XP → the installer
+  should **permanently** install msgothic.ttc ({fonts}+register), not just temp-load it for the wizard.
+  → **BAKED — no font redistribution** (we ship the toolchain, not setup.exe → the BUILDER supplies their own
+  MS PGothic): `tools/get_font.py` (`--ttf` / `--langpack <xp-iso|dir>` / `--windows` / `--from-system`; validates
+  it's MS PGothic + decompresses the XP-CD cab) → `out/font/msgothic.ttc`; `installer/setup.iss` uses the PGothic
+  `.isl` + `[Code]` (AddFontResource for the wizard + permanent `{fonts}` install for the app serifs, skipped if
+  already present) + a build-time `#error` if the font's absent. **`setup.exe` compiles (47.9 MB).** Only the
+  on-q9650 586×364 render check remains (the AddFontResource mechanism is already proven via the proxy test).
+
+- **q9650 enabled as a drivable XP target** (the no-PGothic box): offline-prepped (firewall off, blank-pw
+  network logon, autologon Administrator, `C:\probe\{iexec,nircmd}`), GRUB one-shot boots XP→auto-returns to
+  NixOS (validated). Drivers: onboard NIC = RTL8105E/8136 **REV_05** → needs the last-XP Realtek **v5.836.2018**
+  (the 2009 kit driver gives Code 10); HD5770 → Catalyst 14.4 **pack2** (kit had the wrong pack1!); ALC662 audio
+  → WDM_R274; ICH7 SMBus → null INF. **Kit updated** (master): `xp/nic-rtl8136/` + README, Catalyst pack2 +
+  corrected README, `xp/chipset-inf/smbus_null_27da.inf`. ⚠️ q9650 is **stuck in XP** right now — the v5.836 NIC
+  auto-install didn't bring up networking (likely a signing prompt blocked it while owner was AFK), and with no
+  working NIC + no agent + no WoL on the G41 it's unreachable → **needs a power-cycle to NixOS**, then finish the
+  NIC (the correct signed v5.836 driver is staged at `C:\drivers\nic`) + validate the PGothic bundle there.

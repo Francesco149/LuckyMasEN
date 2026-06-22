@@ -9,6 +9,17 @@ project scope, owner constraints, research findings, and approach analysis live 
 **`retro-hardware/projects/minkit-en-patch/README.md`** — read that first. This repo is where the
 actual RE notes, format specs, tooling, and the redistributable patch are built.
 
+## The English installer — the deliverable
+
+![Lucky*Mas English installer: the faithful 586×364 wizard with bundled MS PGothic, on an XP with no East-Asian language pack](docs/screenshots/installer-wizard-faithful-586x364.png)
+
+An English re-wrap of SYGNAS's own Inno Setup wizard — the original's full-screen blue gradient, Lucky☆Star
+art, and pixel-exact **586×364** size — recompiled from the user's *own* `setup.exe` (never redistributing a
+SYGNAS byte). That faithful size is MS PGothic's specific metrics; no Latin font reproduces it, so the
+toolchain bundles a **builder-supplied** copy of the font ([`tools/get_font.py`](tools/get_font.py) →
+`installer/setup.iss`), `AddFontResource`-d for the wizard and installed for the app's serifs — rendering
+correctly even on an XP with no East-Asian fonts (shown above, validated on the q9650 test box).
+
 ## Demo — the mascots run their own calendar, no Google account
 
 | `SerifCallenderSchedule` — today's events | `SerifCallenderNone` — empty calendar |

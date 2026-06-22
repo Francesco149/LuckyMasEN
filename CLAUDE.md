@@ -44,13 +44,15 @@ lease). Reach XP directly:
 
 **When NixOS is booted:** `ssh root@timemachine.soy` (key auth `headpats@cutestation`).
 
-**Driving the XP GUI** (screenshots / clicking the launcher): only the **agent** sees the interactive desktop
-(wmiexec/SMB runs session-0-blind). Launch GUI apps via **`nircmd exec show <fullpath>`** — the single-threaded
-agent **wedges** if you use `start` and the GUI holds its stdout pipe. **Screenshot via PrtScn→clipboard**
-(`nircmd sendkeypress 0x2c` then `nircmd clipboard saveimage`): the mascot is a per-pixel-alpha **layered
-window** that `nircmd savescreenshotfull` (BitBlt) renders as bare desktop. JP install path breaks cmd
-`start`/`cd` → work from an ASCII copy. The **owner is fastest for live UI testing** — loop them in rather than
-automating blindly. Driver helpers: **`tools/deploy-xp.sh`** (the full deploy+drive recipe — SMBv1/**NT1**
+**Driving the XP GUI** (screenshots / launching apps): the **`xphttpd` agent is RETIRED** → use **`iexec`**
+(`../retro-hardware/projects/xp-remote-probe/xp/iexec.c`) via **`nxc --exec-method smbexec`** (→ LocalSystem;
+the default method = Administrator → `WTSQueryUserToken 1314`) to launch any GUI on the **interactive console
+desktop** and screenshot it — fully agent-less, **no owner needed** (validated on q9650 + TM). Recipe:
+**`docs/xp-ops-cheatsheet.md`** §"Session-1 GUI via iexec". The mascot is a per-pixel-alpha **layered window**
+→ capture via **PrtScn→clipboard** (`iexec … nircmd sendkeypress 0x2c` then `… nircmd clipboard saveimage`),
+NOT `savescreenshotfull` (BitBlt renders it as bare desktop). Measure a window precisely with `winrect.exe`.
+JP install path breaks cmd `start`/`cd` → work from an ASCII copy. Loop the owner in only for visual judgment a
+screenshot can't settle, or physical actions (cabling/BIOS/cards). Driver helpers: **`tools/deploy-xp.sh`** (the full deploy+drive recipe — SMBv1/**NT1**
 or smbclient times out; blank-Administrator auth; **agent vs SMB-exec** split; **kill+del before
 overwrite**; hosts via pull/filter/push; the protected-root cert modal) + `tools/gcal-xp/test/lm.cmd`.
 When the **agent is down** (SMB-only mode), follow **`docs/xp-ops-cheatsheet.md`** — the validated

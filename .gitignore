@@ -39,6 +39,9 @@ __pycache__/
 /tools/gcal-xp/gcalsrv.log
 /tools/gcal-xp/gcal-xp.ini
 
+# Playwright MCP browser-session artifacts (snapshots/console logs from web fetches)
+/.playwright-mcp/
+
 # Editor / OS
 *.swp
 *~

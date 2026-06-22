@@ -102,9 +102,9 @@ def retext(im, box, text, size, text_is_dark, color=None, stroke=0, fit=True, dx
 # Boxes are the interior glyph region (inside any border). `_press` variants reuse the base
 # spec (same geometry/colour role; only the source image differs).
 SPECS = {
-    # mode tabs (81x18, white text on a blue/green gradient) — size 13 (15 looked oversized)
-    'btn_mode_calc':         dict(text='Calc',     box=(4, 1, 77, 17), dark=False, size=13, color=(255, 255, 255, 255)),
-    'btn_mode_kansan':       dict(text='Convert',  box=(4, 1, 77, 17), dark=False, size=13, color=(255, 255, 255, 255)),
+    # mode tabs (81x18, white text on a blue/green gradient) — size 12 (matches pages/Copy; owner-set)
+    'btn_mode_calc':         dict(text='Calc',     box=(4, 1, 77, 17), dark=False, size=12, color=(255, 255, 255, 255)),
+    'btn_mode_kansan':       dict(text='Convert',  box=(4, 1, 77, 17), dark=False, size=12, color=(255, 255, 255, 255)),
     # convert-mode action buttons (60x24, dark gothic on light-gray button)
     'conv_btn_conv':         dict(text='Convert',  box=(7, 5, 53, 20), dark=True,  size=12),
     'conv_btn_copy':         dict(text='Copy',     box=(7, 5, 53, 20), dark=True,  size=12),

@@ -158,8 +158,11 @@ def op_pe_res(e, ctx):
     import pe_res
     path = os.path.join(ctx['out'], tmpl(e['file'], ctx['meta']))
     mapping = {tmpl(k, ctx['meta']): tmpl(v, ctx['meta']) for k, v in e['strings'].items()}
-    res = pe_res.patch(path, path, mapping)
-    log = [f"    pe-res {e['file']}  ({len(res['hits'])} strings translated)"]
+    layout = {dlg: {(int(k) if str(k).lstrip('-').isdigit() else k): v for k, v in ov.items()}
+              for dlg, ov in e.get('layout', {}).items()}
+    res = pe_res.patch(path, path, mapping, layout)
+    geo = f", geom:{','.join(layout)}" if layout else ""
+    log = [f"    pe-res {e['file']}  ({len(res['hits'])} strings translated{geo})"]
     for jp, en in res['hits']:
         log.append(f"        {jp!r} -> {en!r}")
     if res['remaining_jp']:

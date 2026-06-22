@@ -171,6 +171,15 @@ note = "MinkIt.exe config — ABOUTDLG / PREVIEWDLG / SETUPDLG"
 "ｽﾀｰﾄｱｯﾌﾟに登録(&C)" = "Add to Startup(&C)"
 "ﾌﾟﾚﾋﾞｭｰ..." = "Preview..."
 "ｷｬﾝｾﾙ" = "Cancel"
+# PREVIEWDLG layout: the labels (cx 15-17, sized for 作者:) clip "Author:" — widen them and
+# shift the value fields right so they don't overlap. Keys = control index (from pe_res dump).
+[pe_res.layout.PREVIEWDLG]
+5 = { cx = 34 }            # "Title:" label
+6 = { cx = 34 }            # "Author:" label (was clipped)
+7 = { cx = 34 }            # "URL:" label
+0 = { x = 40, cx = 140 }   # Title value field
+1 = { x = 40, cx = 140 }   # Author value field
+2 = { x = 40, cx = 140 }   # URL value field
 
 # WinCalc.exe — base calculator (NOT launched by the launcher; it runs the themed
 # WinCalcImas/Lucky, whose UI is .nut-scripted behind the un-cracked codec — deferred).

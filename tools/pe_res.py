@@ -83,9 +83,12 @@ def _u16r(d, o):
     return struct.unpack_from("<H", d, o)[0]
 
 
-def _dlg_walk(data, on_title, on_ctrl_text):
+def _dlg_walk(data, on_title, on_ctrl_text, geom=None):
     """Walk a DLGTEMPLATE[EX], calling on_title(str)->str and on_ctrl_text(str)->str.
-    Returns the rebuilt bytes (callbacks may translate; identity callbacks round-trip)."""
+    Returns the rebuilt bytes (identity callbacks round-trip byte-for-byte). `geom` optionally
+    overrides geometry: {control_index: {x,y,cx,cy}, 'dialog': {cx,cy}} — used to widen controls
+    so longer EN labels fit the originally JP-sized layout."""
+    geom = geom or {}
     out = bytearray()
     o = 0
     ex = (_u16r(data, 0) == 1 and _u16r(data, 2) == 0xFFFF)
@@ -100,31 +103,40 @@ def _dlg_walk(data, on_title, on_ctrl_text):
         while len(out) & 3:
             out.append(0)
 
+    def setgeom(base, g, fields, off0):
+        for j, f in enumerate(fields):
+            if f in g:
+                _p16(out, base + off0 + j * 2, g[f])
+
     style = _u32(data, 12 if ex else 0)
     cdit = _u16r(data, 16 if ex else 8)
     hdr = 26 if ex else 18
+    dstart = len(out)
     emit(0, hdr); o = hdr
+    if "dialog" in geom:                               # dialog cx,cy live at +22 (ex) / +14
+        setgeom(dstart, geom["dialog"], ("cx", "cy"), 22 if ex else 14)
     o = emit_oos(o)                                    # menu
     o = emit_oos(o)                                    # window class
     title, o = _wsz(data, o)                           # caption (plain sz)
-    nt = on_title(title)
-    out.extend(nt.encode("utf-16-le") + b"\x00\x00")
+    out.extend(on_title(title).encode("utf-16-le") + b"\x00\x00")
     if style & 0x40:                                   # DS_SETFONT
         n = 6 if ex else 2
         emit(o, o + n); o += n
         face, o = _wsz(data, o)
         out.extend(face.encode("utf-16-le") + b"\x00\x00")
-    for _ in range(cdit):
+    for idx in range(cdit):
         align4()
         while o & 3:
             o += 1
+        cstart = len(out)
         n = 24 if ex else 18
         emit(o, o + n); o += n
+        if idx in geom:                                # control x,y,cx,cy at +12 (ex) / +8
+            setgeom(cstart, geom[idx], ("x", "y", "cx", "cy"), 12 if ex else 8)
         o = emit_oos(o)                                # control class
         k, v, o = _ord_or_sz(data, o)                  # control text
         if k == "str":
-            nv = on_ctrl_text(v)
-            out.extend(nv.encode("utf-16-le") + b"\x00\x00")
+            out.extend(on_ctrl_text(v).encode("utf-16-le") + b"\x00\x00")
         else:
             out.extend(struct.pack("<HH", 0xFFFF, v))
         extra = _u16r(data, o); out.extend(struct.pack("<H", extra)); o += 2
@@ -143,8 +155,9 @@ def parse_dialog(data):
     return found
 
 
-def build_dialog(data, mapping):
-    """Rebuild a dialog, translating caption + control text via `mapping`."""
+def build_dialog(data, mapping, geom=None):
+    """Rebuild a dialog, translating caption + control text via `mapping` and optionally
+    overriding control geometry via `geom` (see _dlg_walk)."""
     hit = []
 
     def tr(s):
@@ -154,7 +167,7 @@ def build_dialog(data, mapping):
         return n
 
     try:
-        nb = _dlg_walk(data, tr, tr)
+        nb = _dlg_walk(data, tr, tr, geom)
     except (struct.error, IndexError):
         return data, []
     return nb, hit
@@ -275,8 +288,10 @@ def _res_leaves(d, base):
     return out
 
 
-def patch(inp, outp, mapping):
-    """Translate RT_MENU strings by `mapping`, writing `outp` with a surgical edit.
+def patch(inp, outp, mapping, layout=None):
+    """Translate RT_MENU + RT_DIALOG strings by `mapping` (and apply per-dialog `layout`
+    geometry overrides), writing `outp` with a surgical edit. `layout` =
+    {dialog_name: {control_index: {x,y,cx,cy}, 'dialog': {cx,cy}}}.
     Returns {'hits':[(jp,en)...], 'remaining_jp':[...], 'grew':int}."""
     d = bytearray(open(inp, "rb").read())
     e_lfanew = _u32(d, 0x3C)
@@ -295,16 +310,19 @@ def patch(inp, outp, mapping):
     rs = next(s for s in secs if s["vaddr"] <= res_rva < s["vaddr"] + s["vsize"])
     base = rs["rawptr"]                                # .rsrc file base
 
-    builders = {RT_MENU: (build_menu, parse_menu), RT_DIALOG: (build_dialog, parse_dialog)}
     hits, remaining = [], []
     append_cur = (rs["vsize"] + 3) & ~3               # append point (file-align slack), 4-byte aligned
     for lf in _res_leaves(d, base):
-        if lf["type"] not in builders:
+        if lf["type"] not in (RT_MENU, RT_DIALOG):
             continue
-        build, reparse = builders[lf["type"]]
         blob_off = base + (lf["rva"] - rs["vaddr"])
         old = bytes(d[blob_off:blob_off + lf["size"]])
-        new, hit = build(old, mapping)
+        if lf["type"] == RT_DIALOG:
+            new, hit = build_dialog(old, mapping, (layout or {}).get(lf["name"]))
+            reparse = parse_dialog
+        else:
+            new, hit = build_menu(old, mapping)
+            reparse = parse_menu
         hits += hit
         if new != old:
             if len(new) <= lf["size"]:                # fits in place

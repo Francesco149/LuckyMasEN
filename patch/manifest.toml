@@ -107,6 +107,25 @@ strings = [
   { old = "http://www.google.com/calendar/event?action=TEMPLATE&dates=%4d%02d%02d/%4d%02d%02d", new = "http://localhost/calendar/event?action=TEMPLATE&dates=%4d%02d%02d/%4d%02d%02d" },
 ]
 
+# ─────────────────────────────────────────────────────────────────────────────
+# PE-resource menus (Launch.exe, lang 1041). These are Unicode resources (drawn by
+# the Unicode menu API) so they render on any locale — no ASCII constraint. Keyed by
+# exact JP source string; build_patch warns if a key fails to match (still-JP item).
+# The right-click main menu + the per-app (T)/(D) item menu the owner saw on XP.
+# (Dialogs SETUPDLG/APPNAMEDLG/NEWNAMEDLG + the pin tooltip are the next sub-step.)
+# ─────────────────────────────────────────────────────────────────────────────
+[[pe_res]]
+file = "app/launcher/Launch.exe"
+note = "Launch.exe right-click menus (IDR_MAINMENU + IDR_ITEMMENU)"
+[pe_res.strings]
+"今すぐﾒｰﾙをﾁｪｯｸ(&M)" = "Check Mail Now(&M)"
+"今すぐｽｹｼﾞｭｰﾙをﾁｪｯｸ(&C)" = "Check Schedule Now(&C)"
+"常に前面に表示する(&T)" = "Always on Top(&T)"
+"設定(&S)..." = "Settings(&S)..."
+"終了(&X)" = "Exit(&X)"
+"ﾀｲﾄﾙ変更(&T)..." = "Change Title(&T)..."
+"削除(&D)..." = "Delete(&D)..."
+
 # ═════════════════════════════════════════════════════════════════════════════
 # DEFERRED — recorded for the final product; flip active=true once RE-confirmed.
 # (The engine logs these as DEFERRED in PATCH-LOG.txt but does not apply them.)

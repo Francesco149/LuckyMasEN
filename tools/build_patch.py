@@ -32,7 +32,7 @@ from sygnas_repack import repack_acz                       # xvi op
 from sygnas_unpack import parse_acz                         # (kept importable for verify)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OP_ORDER = ['xvi', 'text_keys', 'text_subst', 'text_file', 'binpatch', 'rename']
+OP_ORDER = ['xvi', 'text_keys', 'text_subst', 'text_file', 'binpatch', 'pe_res', 'rename']
 
 
 class PatchError(Exception):
@@ -152,6 +152,22 @@ def op_binpatch(e, ctx):
     return log
 
 
+def op_pe_res(e, ctx):
+    """Translate PE-resource strings (lang 1041 menus, later dialogs) via lief — these are
+    Unicode resources, so no ASCII constraint. `strings` maps JP source -> EN."""
+    import pe_res
+    path = os.path.join(ctx['out'], tmpl(e['file'], ctx['meta']))
+    mapping = {tmpl(k, ctx['meta']): tmpl(v, ctx['meta']) for k, v in e['strings'].items()}
+    res = pe_res.patch(path, path, mapping)
+    log = [f"    pe-res {e['file']}  ({len(res['hits'])} strings translated)"]
+    for jp, en in res['hits']:
+        log.append(f"        {jp!r} -> {en!r}")
+    if res['remaining_jp']:
+        log.append(f"        !! {len(res['remaining_jp'])} menu string(s) still JP "
+                   f"(unmapped key?): " + ", ".join(repr(x) for x in res['remaining_jp'][:12]))
+    return log
+
+
 def op_rename(e, ctx):
     frm = os.path.join(ctx['out'], tmpl(e['frm'], ctx['meta']))
     to = os.path.join(ctx['out'], tmpl(e['to'], ctx['meta']))
@@ -163,7 +179,8 @@ def op_rename(e, ctx):
 
 
 OPS = {'xvi': op_xvi, 'text_keys': op_text_keys, 'text_subst': op_text_subst,
-       'text_file': op_text_file, 'binpatch': op_binpatch, 'rename': op_rename}
+       'text_file': op_text_file, 'binpatch': op_binpatch, 'pe_res': op_pe_res,
+       'rename': op_rename}
 
 
 def build(originals, out, manifest_path):

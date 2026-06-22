@@ -73,16 +73,19 @@ AboutSetupNote=
 TranslatorNote=
 
 ; *** Buttons
-ButtonBack=< &Back
-ButtonNext=&Next >
-ButtonInstall=&Install
+; Faithful to the JP original (Inno's bundled Japanese.isl, which the original installer rendered):
+; the accelerator is shown parenthesized after the caption — 戻る(&B) / 次へ(&N) / 完了(&F) etc.
+; Keep the SAME accelerator keys as the original (B / N / I / F); Cancel had no accelerator (キャンセル).
+ButtonBack=< Back (&B)
+ButtonNext=Next (&N) >
+ButtonInstall=Install (&I)
 ButtonOK=OK
 ButtonCancel=Cancel
 ButtonYes=&Yes
 ButtonYesToAll=Yes to &All
 ButtonNo=&No
 ButtonNoToAll=N&o to All
-ButtonFinish=&Finish
+ButtonFinish=Finish (&F)
 ButtonBrowse=&Browse...
 ButtonWizardBrowse=B&rowse...
 ButtonNewFolder=&Make New Folder

@@ -209,7 +209,15 @@ def build_menu(data, mapping):
 
 
 def has_jp(s):
-    return any(ord(c) > 0x7F for c in s)
+    """True only for actual Japanese script (kana / CJK / halfwidth-kana) — NOT every
+    non-ASCII char, so legitimately-translated strings with ☆/× aren't false-flagged."""
+    for c in s:
+        o = ord(c)
+        if (0x3040 <= o <= 0x30FF or      # hiragana + katakana
+                0x3400 <= o <= 0x9FFF or  # CJK (incl. ext-A)
+                0xFF61 <= o <= 0xFF9F):   # halfwidth katakana
+            return True
+    return False
 
 
 # ── surgical PE resource patch (NO lief.write — it rebuilds the whole PE and breaks XP) ──

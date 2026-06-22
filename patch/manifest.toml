@@ -155,6 +155,42 @@ note = "Launch.exe menus (IDR_MAINMENU/IDR_ITEMMENU) + dialogs (SETUPDLG/APPNAME
 "名前を付けて保存(&S)" = "Save As(&S)"
 "ｽﾀｰﾄｱｯﾌﾟに登録(&R)" = "Add to Startup(&R)"
 
+# MinkIt.exe — the copy-animation app (launcher "Copy Animation"). Its config dialogs.
+[[pe_res]]
+file = "app/copy/MinkIt.exe"
+note = "MinkIt.exe config — ABOUTDLG / PREVIEWDLG / SETUPDLG"
+[pe_res.strings]
+"MinkIt!について" = "About MinkIt!"
+"ﾀｲﾄﾙ:" = "Title:"
+"作者:" = "Author:"
+"MinkIt!の設定" = "MinkIt! Settings"
+"ｱﾆﾒｰｼｮﾝﾃﾞｰﾀのﾌｫﾙﾀﾞ(&F):" = "Animation folder(&F):"
+"参照..." = "..."
+"ｲﾍﾞﾝﾄﾀｲﾌﾟ(&T):" = "Event(&T):"
+"このｲﾍﾞﾝﾄのｱﾆﾒｰｼｮﾝを有効にする(&E)" = "Enable this animation(&E)"
+"ｽﾀｰﾄｱｯﾌﾟに登録(&C)" = "Add to Startup(&C)"
+"ﾌﾟﾚﾋﾞｭｰ..." = "Preview..."
+"ｷｬﾝｾﾙ" = "Cancel"
+
+# WinCalc.exe — base calculator (NOT launched by the launcher; it runs the themed
+# WinCalcImas/Lucky, whose UI is .nut-scripted behind the un-cracked codec — deferred).
+# Translate the visible menu + dialogs for completeness; the RT_STRING table is skipped
+# (it's standard MFC framework boilerplate — document/print/window prompts never shown).
+[[pe_res]]
+file = "app/calc/WinCalc.exe"
+note = "WinCalc.exe menu (202) + dialogs (About/main/Error/Tax). MFC string table skipped."
+[pe_res.strings]
+"コピー(&C)\tCTRL+C" = "Copy(&C)\tCtrl+C"
+"ペースト(&V)\tCTRL+V" = "Paste(&V)\tCtrl+V"
+"税率設定(&T)" = "Tax Rate(&T)"
+"終了(X)" = "Exit(X)"
+"バージョン情報" = "About"
+"らき☆マス電卓" = "Lucky☆Mas Calculator"
+"エラー" = "Error"
+"税率設定" = "Tax Rate"
+"税率" = "Tax Rate"
+"キャンセル" = "Cancel"
+
 # ═════════════════════════════════════════════════════════════════════════════
 # DEFERRED — recorded for the final product; flip active=true once RE-confirmed.
 # (The engine logs these as DEFERRED in PATCH-LOG.txt but does not apply them.)

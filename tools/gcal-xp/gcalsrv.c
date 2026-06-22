@@ -442,7 +442,9 @@ static int tls_init(void) {
     SECURITY_STATUS ss = AcquireCredentialsHandleA(NULL, (SEC_CHAR *)UNISP_NAME_A,
             SECPKG_CRED_INBOUND, NULL, &sc, NULL, NULL, &g_hCred, &ts);
     if (ss != SEC_E_OK) { logln("TLS: AcquireCredentialsHandle failed 0x%08lx", (unsigned long)ss); return 0; }
-    logln("TLS: server credential acquired (cert CN=www.google.com)");
+    char cn[128] = "?";
+    CertGetNameStringA(g_pCert, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, cn, sizeof(cn));
+    logln("TLS: server credential acquired (cert CN=%s)", cn);   /* read it; don't hardcode */
     return 1;
 }
 

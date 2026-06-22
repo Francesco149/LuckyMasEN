@@ -6,7 +6,13 @@
 #   * RSA-2048            — XP handles 2048 fine; avoid EC (XP Schannel can't).
 #   * -sha1              — XP SP3 Schannel validates SHA-1 out of the box; SHA-256
 #                          needs KB968730/938397 which may be absent. SHA-1 is safe.
-#   * CN + SAN www.google.com — WinINet checks the CN; SAN added for good measure.
+#   * CN=localhost + SAN   — the deliverable byte-patches gcalcore.dll's host string
+#                          www.google.com -> localhost (so XP keeps real internet, no
+#                          hosts blackhole), so the client connects to "localhost" and
+#                          the cert name must match it. CN=localhost covers XP WinINet
+#                          even if it name-matches on the CN; the SAN also lists
+#                          www.google.com et al. so the LEGACY hosts-redirect (unpatched
+#                          binary) still validates on stacks that honor the SAN.
 #   * 20y validity        — set-and-forget for a retro box (clock may even be wrong).
 #   * minimal extensions  — a bare self-signed leaf. Installed into XP's Trusted Root
 #                          it becomes its own trust anchor (CryptoAPI trusts a
@@ -21,8 +27,8 @@ mkdir -p "$d"
 
 openssl req -x509 -newkey rsa:2048 -sha1 -days 7300 -nodes \
   -keyout "$d/xp-google.key" -out "$d/xp-google.crt" \
-  -subj "/CN=www.google.com" \
-  -addext "subjectAltName=DNS:www.google.com,DNS:google.com,DNS:*.google.com"
+  -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1,DNS:www.google.com,DNS:google.com,DNS:*.google.com"
 
 # DER copy for XP-side import (certmgr / CertAddEncodedCertificateToStore / .reg blob).
 openssl x509 -in "$d/xp-google.crt" -outform DER -out "$d/xp-google.der"

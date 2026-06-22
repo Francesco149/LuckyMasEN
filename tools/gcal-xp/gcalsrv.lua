@@ -67,7 +67,11 @@ local function anchor_date(query)
 end
 
 local function allcalendars(c)
-  local href = ("http://www.google.com/calendar/feeds/%s/private/full"):format(c.account)
+  -- Event-feed link the client follows. Use localhost so it works BOTH with the
+  -- gcalcore.dll host->localhost byte-patch AND the legacy hosts-redirect (localhost
+  -- always resolves to 127.0.0.1, where our server listens). www.google.com here
+  -- would send the patched client to the REAL Google for the event feed.
+  local href = ("http://localhost/calendar/feeds/%s/private/full"):format(c.account)
   return table.concat({
     "<?xml version='1.0' encoding='UTF-8'?>",
     "<feed " .. ATOM_NS .. ">",

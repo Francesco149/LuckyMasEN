@@ -28,6 +28,12 @@
 #if !FileExists(AddBackslash(SourcePath) + FontFile)
   #error MS PGothic not found at out\font\msgothic.ttc -- run: python3 tools/get_font.py --list-sources
 #endif
+; gcal-xp native fake-Google server (tools/gcal-xp) — installed + autostarted so the launcher's
+; calendar/mail work locally out of the box.  Build prereq: tools/gcal-xp/build.sh (i686/XP EXE).
+#define GcalSrv "..\tools\gcal-xp"
+#if !FileExists(AddBackslash(SourcePath) + GcalSrv + "\gcalsrv.exe")
+  #error gcalsrv.exe not found -- run: tools/gcal-xp/build.sh
+#endif
 
 [Setup]
 ; AppId is the ASCII uninstall key (kept *-free); AppName is the *-styled display name.
@@ -93,6 +99,9 @@ Source: "{#Src}\app\*"; DestDir: "{app}"; Excludes: "launcher\Launch.ini.org"; F
 Source: "{#Src}\sys\*.scr"; DestDir: "{sys}"; Flags: ignoreversion
 ; MS PGothic — bundled (dontcopy) so [Code] can AddFontResource it for the wizard + install it to {fonts}.
 Source: "{#FontFile}"; DestDir: "{tmp}"; Flags: dontcopy
+; gcal-xp server + its editable request-logic script -> {app}\gcal-xp (the cert is embedded in the EXE).
+Source: "{#GcalSrv}\gcalsrv.exe"; DestDir: "{app}\gcal-xp"; Flags: ignoreversion
+Source: "{#GcalSrv}\gcalsrv.lua"; DestDir: "{app}\gcal-xp"; Flags: ignoreversion
 
 [Icons]
 ; Start Menu group = SYGNAS\LuckyMas.  Launcher/calendar need cwd = their own dir
@@ -105,6 +114,10 @@ Name: "{group}\Calculator";            Filename: "{app}\calc\WinCalc.exe";      
 Name: "{group}\Copy Animation";        Filename: "{app}\copy\MinkIt.exe";       WorkingDir: "{app}\copy"
 Name: "{group}\Wallpaper";             Filename: "{app}\wallpaper\wallpaper.html"
 Name: "{group}\Display Properties";    Filename: "{sys}\desk.cpl"
+; The local fake-Google server: a Start-Menu entry + autostart (tray) for every user on login.
+; --no-cert because the installer already trusted the cert (the [Run] --install-cert step below).
+Name: "{group}\Fake Google server (gcal-xp)"; Filename: "{app}\gcal-xp\gcalsrv.exe"; Parameters: "--no-cert"; WorkingDir: "{app}\gcal-xp"
+Name: "{commonstartup}\gcal-xp";              Filename: "{app}\gcal-xp\gcalsrv.exe"; Parameters: "--no-cert"; WorkingDir: "{app}\gcal-xp"
 Name: "{group}\ReadMe";                Filename: "{app}\ReadMe.txt"
 Name: "{group}\SYGNAS Website";        Filename: "{app}\SYGNAS.url"
 Name: "{group}\Uninstall Lucky Mas";   Filename: "{uninstallexe}"
@@ -124,7 +137,14 @@ Filename: "{app}\launcher\Launch.ini"; Section: "Launch"; Key: "Exec009"; String
 ; MinkIt's animation folder (no MinkIt.ini ships originally -> the EN install writes it; *.mink live here).
 Filename: "{app}\copy\MinkIt.ini"; Section: "Path"; Key: "Folder"; String: "{app}\copy"
 
-; [Run] intentionally omitted — the original's Finish page has no "open folder" option.
+[Run]
+; (1) Trust the server's www.google.com/localhost cert, as admin, into LocalMachine\Root — silent,
+;     no protected-root modal (the cert is embedded in gcalsrv.exe).  (2) Start the server now, as
+;     the logged-in user, so its tray icon appears in their session (it autostarts on later logins
+;     via the {commonstartup} shortcut above).  The launcher's calendar/mail are already pointed at
+;     localhost (host->localhost binpatch), so clicking them reaches this server.
+Filename: "{app}\gcal-xp\gcalsrv.exe"; Parameters: "--install-cert"; Flags: runhidden waituntilterminated; StatusMsg: "Trusting the local server certificate..."
+Filename: "{app}\gcal-xp\gcalsrv.exe"; Parameters: "--no-cert"; WorkingDir: "{app}\gcal-xp"; Flags: nowait runasoriginaluser skipifsilent
 
 [Code]
 (* MS PGothic delivery (font is BUILDER-supplied -- see the .iss header + tools/get_font.py):

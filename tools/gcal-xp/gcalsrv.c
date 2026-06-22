@@ -506,6 +506,20 @@ static DWORD WINAPI cert_install_thread(void *arg) {
     return 0;
 }
 
+/* --install-cert: import the embedded cert into LocalMachine\Root ONLY (no CurrentUser store =
+ * no protected-root modal) and exit. For the installer to silently trust the TLS endpoint as
+ * admin, so the autostarted gcalsrv can then run --no-cert. */
+static int cert_install_machine(void) {
+    if (!g_pCert) return 0;
+    HCERTSTORE h = CertOpenStore(CERT_STORE_PROV_SYSTEM_A, 0, 0, CERT_SYSTEM_STORE_LOCAL_MACHINE, "ROOT");
+    if (!h) { logln("cert: open LocalMachine\\Root failed 0x%08lx", GetLastError()); return 0; }
+    BOOL ok = CertAddEncodedCertificateToStore(h, X509_ASN_ENCODING, g_pCert->pbCertEncoded,
+                g_pCert->cbCertEncoded, CERT_STORE_ADD_REPLACE_EXISTING, NULL);
+    logln("cert: --install-cert -> LocalMachine\\Root: %s", ok ? "ok" : "FAILED");
+    CertCloseStore(h, 0);
+    return ok;
+}
+
 /* Server-side handshake. On success: *ctx valid, inbuf[0..*inlen) holds leftover app bytes. */
 static int tls_handshake(SOCKET c, const char *peer, CtxtHandle *ctx, char *inbuf, int *inlen) {
     BOOL haveCtx = FALSE;
@@ -810,9 +824,10 @@ static void run_tray(void) {
 }
 
 int main(int argc, char **argv) {
-    int want_install = 0, want_tls = 1, want_cert = 1;
+    int want_install = 0, want_tls = 1, want_cert = 1, want_install_cert = 0;
     for (int i = 1; i < argc; i++) {
-        if      (!strcmp(argv[i], "--install"))    want_install = 1;
+        if      (!strcmp(argv[i], "--install"))      want_install = 1;
+        else if (!strcmp(argv[i], "--install-cert")) want_install_cert = 1;
         else if (!strcmp(argv[i], "--no-tls"))     want_tls = 0;
         else if (!strcmp(argv[i], "--no-cert"))    want_cert = 0;
         else if (!strcmp(argv[i], "--no-tray"))    g_tray = 0;
@@ -839,6 +854,12 @@ int main(int argc, char **argv) {
 
     WSADATA w;
     if (WSAStartup(MAKEWORD(2, 2), &w) != 0) { logln("FATAL: WSAStartup failed"); return 1; }
+
+    if (want_install_cert) {                 /* installer step: trust the cert (admin), then exit */
+        int ok = tls_init() && cert_install_machine();
+        logln("--install-cert: %s", ok ? "done" : "FAILED");
+        return ok ? 0 : 1;
+    }
 
     if (!lua_init()) { logln("FATAL: Lua init failed — no request logic"); return 1; }
 

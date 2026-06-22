@@ -346,6 +346,52 @@ note = "gcalcore.dll — GoogleAccount dialog (129): title + Cancel"
 "キャンセル" = "Cancel"
 
 # ═════════════════════════════════════════════════════════════════════════════
+# CALC data.pak — the themed calculators' Squirrel UI text. WinCalcImas/Lucky.exe
+# DoFileEx into calmain.nut (a member of data.pak), compressed with the calc's own
+# LZSS (cracked — tools/sygnas_unpack.pak_decompress). The displayed strings live in
+# calmain.nut's converter mode (note-length / fps / paper-thickness tools); calculator/
+# calimas/callucky.nut carry only JP code COMMENTS (not drawn) so are left untouched.
+# The engine draws these via DrawTextA → EN MUST be pure ASCII (goal #2: non-JP locale),
+# so … -> ..., （ms）-> (ms), ： -> :, full-width spaces avoided. The conversion textbox is
+# 176px wide and scrolls vertically (no auto-wrap) → keep each line within the original's
+# width (it manually line-breaks the long help texts; we match). `\n` here is the Squirrel
+# source escape (backslash-n), not a real newline. build_patch asserts every string literal
+# is ASCII after substitution. The button LABELS baked into PNGs are a separate image task.
+# ═════════════════════════════════════════════════════════════════════════════
+[[pak]]
+file = "app/calc/data.pak"
+note = "data.pak — calmain.nut converter strings -> EN ASCII (re-compressed via the cracked .nut codec)"
+[[pak.member]]
+name = "calmain.nut"
+encoding = "cp932"
+subs = [
+  # converter-mode help text (TextBoxStr[0..4]); the original manually wraps to ~28 cols
+  { from = "入力：音符ひとつ分の時間（ms）\\n出力：各音符の長さが入力値だ\\nった場合のBPM\\n", to = "Input: note length (ms)\\nOutput: the BPM if each\\nnote is that long\\n" },
+  { from = "入力：調べたいBPM値\\n出力：音符ひとつ分の時間（ms）\\n", to = "Input: BPM to check\\nOutput: note length (ms)\\n" },
+  { from = "入力：時間（ms）\\n出力：各fpsの時のframe数\\n", to = "Input: time (ms)\\nOutput: frames at each fps\\n" },
+  { from = "入力：fps\\n出力：1frameあたりの時間\\n", to = "Input: fps\\nOutput: time per frame\\n" },
+  { from = "入力：ページ数\\n出力：厚さ\\n", to = "Input: page count\\nOutput: thickness\\n" },
+  # validation message (shown for zero / invalid input)
+  { from = "正しい値を入力してください。\\n", to = "Please enter a valid value.\\n" },
+  # note-length result labels — … -> ...; padded so the dots line up (whole/half/quarter/eighth/16th note)
+  { from = "全音符     … ", to = "Whole   ... " },
+  { from = "二分音符   … ", to = "Half    ... " },
+  { from = "四分音符   … ", to = "Quarter ... " },
+  { from = "八分音符   … ", to = "Eighth  ... " },
+  { from = "十六分音符 … ", to = "16th    ... " },
+  # fps / paper-weight result separators
+  { from = "fps … ", to = "fps ... " },
+  { from = "kg … ", to = "kg ... " },
+  # paper types (・ bullet -> "- "): 上質紙 / アート紙・コート紙 / マット紙
+  { from = "・上質紙\\n", to = "- Fine paper\\n" },
+  { from = "・アート紙/コート紙\\n", to = "- Art/coated paper\\n" },
+  { from = "・マット紙\\n", to = "- Matte paper\\n" },
+  # page-count unit, then the shared "入力：" prefix LAST (the full help texts above start with it)
+  { from = "ページ\\n\\n", to = " pages\\n\\n" },
+  { from = "入力：", to = "Input: " },
+]
+
+# ═════════════════════════════════════════════════════════════════════════════
 # DEFERRED — recorded for the final product; flip active=true once RE-confirmed.
 # (The engine logs these as DEFERRED in PATCH-LOG.txt but does not apply them.)
 # ═════════════════════════════════════════════════════════════════════════════

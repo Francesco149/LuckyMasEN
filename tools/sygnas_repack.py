@@ -11,13 +11,19 @@ constant type id (0x8b878b01 for every Ini, not a checksum), so it is preserved 
 The encoder only emits non-overlapping back-references into already-written history, so the
 output is always safely decodable; it is not size-optimal, but every Ini round-trips exactly.
 
+This module ALSO encodes the calc PACKDATA `.nut` codec (a *different* LZSS — see
+sygnas_unpack.pak_decompress): `pak_compress` + `repack_packdata` rebuild a `data.pak` with
+named members replaced (`.nut` re-compressed, PNGs stored verbatim). The encoder self-checks
+each blob by decoding it back before returning, so a corrupt member can never be written.
+
 Usage:
   sygnas_repack.py <orig.Xvi> <new_ini.txt> <out.Xvi>   # rebuild one .Xvi with a new Ini (cp932 text in)
   sygnas_repack.py --selftest <dir-of-.Xvi>             # prove encode∘decode == identity on all originals
+  sygnas_repack.py --selftest-pak <data.pak>            # prove the PACKDATA .nut encoder round-trips
 """
 import os, sys, struct
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sygnas_unpack import lzss_decompress, u32
+from sygnas_unpack import lzss_decompress, pak_decompress, u32
 
 def lzss_compress(data, N=4096, F=18, THRESHOLD=2, init=0x20):
     win = bytearray([init]) * N
@@ -92,6 +98,103 @@ def get_ini(b):
             return lzss_decompress(b[off:off+stored], expected=usize)
     return None
 
+# ── PACKDATA (.pak) — the calc data container ────────────────────────────────────
+def pak_compress(data, WINDOW=4096, MINMATCH=3, MAXMATCH=17):
+    """Encoder for the calc `.nut` LZSS (decode-compatible with sygnas_unpack.pak_decompress).
+    Greedy longest-match via a rolling 3-byte index, 12-bit window, match len 2..17. Not
+    size-optimal but always exactly decodable; self-verified before returning."""
+    n = len(data); i = 0
+    out = bytearray(); flagval = 0; flagbit = 0; pend = bytearray()
+    idx = {}                                            # 3-byte key -> positions (append-only)
+    def flush():
+        nonlocal flagval, flagbit, pend
+        out.append(flagval); out.extend(pend)
+        flagval = 0; flagbit = 0; pend = bytearray()
+    while i < n:
+        best_len = best_dist = 0
+        if i + 3 <= n:
+            cands = idx.get(bytes(data[i:i+3]))
+            if cands:
+                for src in reversed(cands[-256:]):      # cap candidates (speed; ratio is fine)
+                    dist = i - src
+                    if dist > WINDOW:
+                        break
+                    l = 0; maxl = min(MAXMATCH, n - i)
+                    while l < maxl and data[src + l] == data[i + l]:
+                        l += 1
+                    if l > best_len:
+                        best_len, best_dist = l, dist
+                        if l == maxl:
+                            break
+        if best_len >= MINMATCH:                        # emit a match token (flag bit 0)
+            d = best_dist - 1
+            pend.append(((best_len - 2) & 0x0f) | ((d & 0x0f) << 4)); pend.append((d >> 4) & 0xff)
+            for j in range(i, min(i + best_len, n - 2)):
+                idx.setdefault(bytes(data[j:j+3]), []).append(j)
+            i += best_len
+        else:                                           # emit a literal (flag bit 1, MSB-first)
+            pend.append(data[i]); flagval |= (0x80 >> flagbit)
+            if i + 3 <= n:
+                idx.setdefault(bytes(data[i:i+3]), []).append(i)
+            i += 1
+        flagbit += 1
+        if flagbit == 8:
+            flush()
+    if flagbit:
+        flush()
+    comp = bytes(out)
+    assert pak_decompress(comp, n) == data, "pak encoder/decoder mismatch — refusing to write"
+    return comp
+
+
+def packdata_entries(b):
+    assert b[:8] == b'PACKDATA', "not a PACKDATA container"
+    n = u32(b, 8); o = 16; ents = []
+    for _ in range(n):
+        name = b[o:o+32].split(b'\x00')[0].decode('latin1')
+        ents.append((name, u32(b, o+32), u32(b, o+36), u32(b, o+40))); o += 44
+    return ents, o                                      # o == data-section start (16 + n*44)
+
+
+def repack_packdata(orig, overrides):
+    """Rebuild a PACKDATA `.pak`, replacing named members. `overrides`: member name -> new
+    DECODED bytes. `.nut` members are re-compressed (pak_compress); any other (PNG) is stored
+    verbatim. Untouched members keep their exact original bytes; the directory is rebuilt."""
+    ents, ds = packdata_entries(orig)
+    dirbuf = bytearray(); databuf = bytearray(); cur = 0
+    for name, usize, stored, off in ents:
+        if name in overrides:
+            plain = overrides[name]
+            blob = pak_compress(plain) if name.endswith('.nut') else plain
+            usz = len(plain)
+        else:
+            blob = orig[ds+off: ds+off+stored]; usz = usize
+        dirbuf += name.encode('latin1')[:32].ljust(32, b'\x00') + struct.pack('<III', usz, len(blob), cur)
+        databuf += blob; cur += len(blob)
+    return bytes(orig[:16]) + bytes(dirbuf) + bytes(databuf)
+
+
+def selftest_pak(pak_path):
+    b = open(pak_path, 'rb').read()
+    ents, ds = packdata_entries(b)
+    ok = bad = 0
+    for name, usize, stored, off in ents:
+        if not name.endswith('.nut'):
+            continue
+        plain = pak_decompress(b[ds+off: ds+off+stored], usize)
+        comp = pak_compress(plain)                      # self-asserts decode==plain
+        good = (pak_decompress(comp, len(plain)) == plain) and (len(plain) == usize)
+        # whole-container rebuild re-extracts the identical member
+        rebuilt = repack_packdata(b, {name: plain})
+        re_ents, re_ds = packdata_entries(rebuilt)
+        ro, rs, ru = next((o, s, u) for nm, u, s, o in re_ents if nm == name)
+        good &= pak_decompress(rebuilt[re_ds+ro: re_ds+ro+rs], ru) == plain
+        print(f"  {'ok ' if good else 'FAIL'} {name:16} plain={len(plain):6}b  ours={len(comp):6}b  orig={stored:6}b")
+        ok += good; bad += (not good)
+    print(f"\n{ok} ok, {bad} fail")
+    return bad == 0
+
+
 def selftest(d):
     import glob
     ok = bad = 0
@@ -114,6 +217,8 @@ def selftest(d):
 def main(argv):
     if len(argv) == 2 and argv[0] == '--selftest':
         return 0 if selftest(argv[1]) else 1
+    if len(argv) == 2 and argv[0] == '--selftest-pak':
+        return 0 if selftest_pak(argv[1]) else 1
     if len(argv) == 3:
         orig = open(argv[0], 'rb').read()
         new_ini = open(argv[1], 'rb').read()

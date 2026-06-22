@@ -22,6 +22,10 @@ Manifest op tables (applied in this fixed order; rename always last):
   [[text_file]]  file + src        — replace a whole file with a tracked EN version
   [[binpatch]]   file + strings[]  — replace whole NUL-terminated strings in place
                                      (wide=true UTF-16LE | encoding="cp932" SJIS | latin1)
+  [[pe_res]]     file + strings{}  — translate PE-resource menus/dialogs (lang 1041) via lief
+  [[pak]]        file + member[]   — rebuild a PACKDATA .pak (calc data.pak): each member is
+                                     either `subs[]` (decode .nut, find->replace, re-compress)
+                                     or `src` (replace member bytes, e.g. an EN button PNG)
   [[rename]]     frm + to          — rename a file within the patched tree
 Every op may set `active = false` to record intent without applying (logged DEFERRED).
 String fields are templated with {install_root_jp}/{install_root_en} from [meta].
@@ -29,11 +33,11 @@ String fields are templated with {install_root_jp}/{install_root_en} from [meta]
 import os, sys, re, shutil, tomllib, argparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sygnas_repack import repack_acz                       # xvi op
-from sygnas_unpack import parse_acz                         # (kept importable for verify)
+from sygnas_repack import repack_acz, repack_packdata      # xvi / pak ops
+from sygnas_unpack import parse_acz, parse_packdata         # (parse_packdata: pak op member read)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OP_ORDER = ['xvi', 'text_keys', 'text_subst', 'text_file', 'binpatch', 'pe_res', 'rename']
+OP_ORDER = ['xvi', 'text_keys', 'text_subst', 'text_file', 'binpatch', 'pe_res', 'pak', 'rename']
 
 
 class PatchError(Exception):
@@ -178,6 +182,52 @@ def op_pe_res(e, ctx):
     return log
 
 
+def op_pak(e, ctx):
+    """Rebuild a PACKDATA `.pak` (the calc `data.pak`). Each `[[pak.member]]` either carries
+    `subs` (decode the .nut via the cracked codec, apply cp932 find->replace like text_subst —
+    EN must be pure ASCII since the engine draws it with DrawTextA — then re-compress) or `src`
+    (replace the member's bytes wholesale, e.g. a translated button PNG). We operate only on the
+    user's own data.pak; only the EN strings / generated art are redistributable."""
+    path = os.path.join(ctx['out'], tmpl(e['file'], ctx['meta']))
+    orig = open(path, 'rb').read()
+    members = {name: data for name, data, _ in parse_packdata(orig)}   # name -> decoded bytes
+    overrides = {}
+    log = [f"    pak  {e['file']}"]
+    for m in e.get('member', []):
+        name = m['name']
+        if name not in members:
+            raise PatchError(f"pak {e['file']}: member {name!r} not found")
+        if 'subs' in m:
+            enc = m.get('encoding', 'cp932')
+            text = members[name].decode(enc)
+            log.append(f"        member {name} ({enc}, {len(m['subs'])} subs)")
+            for sub in m['subs']:
+                frm, to = tmpl(sub['from'], ctx['meta']), tmpl(sub['to'], ctx['meta'])
+                n = text.count(frm)
+                if n == 0 and sub.get('require', True):
+                    raise PatchError(f"pak {e['file']} [{name}]: {frm!r} not found")
+                text = text.replace(frm, to)
+                log.append(f"            {frm!r} -> {to!r}  (x{n})")
+            new = text.encode(enc)
+            bad = [s for s in re.findall(r'"((?:[^"\\]|\\.)*)"', text) if any(ord(c) > 0x7f for c in s)]
+            if bad:
+                raise PatchError(f"pak {e['file']} [{name}]: non-ASCII string literal(s) remain "
+                                 f"(DrawTextA mojibake risk): {bad[:6]}")
+            overrides[name] = new
+        elif 'src' in m:
+            src = os.path.join(REPO, tmpl(m['src'], ctx['meta']))
+            if not os.path.exists(src):
+                raise PatchError(f"pak {e['file']}: member src missing: {m['src']}")
+            overrides[name] = open(src, 'rb').read()
+            log.append(f"        member {name} <- {m['src']}  ({len(overrides[name])}b)")
+        else:
+            raise PatchError(f"pak {e['file']}: member {name!r} has neither subs nor src")
+    new_pak = repack_packdata(orig, overrides)
+    open(path, 'wb').write(new_pak)
+    log.append(f"        rebuilt {len(orig)} -> {len(new_pak)}b  ({len(overrides)} member(s) replaced)")
+    return log
+
+
 def op_rename(e, ctx):
     frm = os.path.join(ctx['out'], tmpl(e['frm'], ctx['meta']))
     to = os.path.join(ctx['out'], tmpl(e['to'], ctx['meta']))
@@ -190,7 +240,7 @@ def op_rename(e, ctx):
 
 OPS = {'xvi': op_xvi, 'text_keys': op_text_keys, 'text_subst': op_text_subst,
        'text_file': op_text_file, 'binpatch': op_binpatch, 'pe_res': op_pe_res,
-       'rename': op_rename}
+       'pak': op_pak, 'rename': op_rename}
 
 
 def build(originals, out, manifest_path):

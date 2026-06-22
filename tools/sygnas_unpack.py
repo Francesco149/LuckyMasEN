@@ -9,9 +9,10 @@ Handles the three chunk formats reverse-engineered in docs/mink-format.md:
 
 Compression: the launcher's ACZ text blob (the `Ini` chunk = the character's
 speech/dialogue) uses canonical **Okumura LZSS** (N=4096, F=18, THRESHOLD=2, ring
-pre-filled with 0x20, flag bit set = literal). This module decompresses those.
-The calc `.nut` blobs and the `.mink` a0/m0 sprite streams use *other* codecs
-(not yet cracked) and are emitted raw, with a `.raw` suffix.
+pre-filled with 0x20, flag bit set = literal). The calc PACKDATA `.nut` (Squirrel
+source) blobs use a *different* LZSS (see `pak_decompress`) — also cracked, so they
+are emitted decoded. Only the `.mink` a0/m0 sprite streams use a still-unknown codec
+and are emitted raw, with a `.raw` suffix (they carry no text → don't gate the TL).
 
 Stdlib only — runs anywhere (no flake needed). Reversible; reads originals, never writes them.
 
@@ -54,6 +55,31 @@ def lzss_decompress(data, expected=None, N=4096, F=18, THRESHOLD=2, init=0x20):
                 out.append(c); ring[r] = c; r = (r + 1) % N
     return bytes(out)
 
+# ---- PACKDATA (.pak .nut) LZSS — the calculator Squirrel-script codec -----------
+def pak_decompress(data, usize, WINDOW=4096):
+    """The calc `data.pak` `.nut` codec (distinct from the ACZ/Okumura text codec above):
+    a control byte's 8 bits are read **MSB-first**, bit **set = literal** (one byte), bit
+    **clear = match** (a 2-byte token b0,b1) with
+        length   = (b0 & 0x0f) + 2                      # 2..17
+        distance = ((b0 >> 4) | (b1 << 4)) + 1          # 1..4096 (12-bit window)
+    and the copy is overlap-capable (RLE: length may exceed distance). Byte-exact on all
+    four .nut (`usize` matches; output is clean Squirrel source)."""
+    out = bytearray(); i = 0; flags = 0; nbits = 0; L = len(data)
+    while len(out) < usize and i < L:
+        if nbits == 0:
+            flags = data[i]; i += 1; nbits = 8
+        bit = (flags >> 7) & 1; flags = (flags << 1) & 0xff; nbits -= 1
+        if bit:
+            out.append(data[i]); i += 1
+        else:
+            b0, b1 = data[i], data[i + 1]; i += 2
+            length = (b0 & 0x0f) + 2
+            src = len(out) - (((b0 >> 4) | (b1 << 4)) + 1)
+            for k in range(length):
+                out.append(out[src + k])
+    return bytes(out)
+
+
 # ---- container parsers: each yields (name, data, kind) --------------------------
 # kind: 'text' = decoded UTF-able config | 'asset' = ready file (PNG/…) | 'raw' = unknown codec
 def parse_mink(b):
@@ -86,7 +112,10 @@ def parse_packdata(b):
     ds = o
     for name, usize, stored, off in ents:
         raw = b[ds+off: ds+off+stored]
-        yield (name, raw, 'raw' if stored != usize else 'asset')   # PNG 1:1; .nut compressed (codec TBD)
+        if stored != usize:                            # compressed (the 4 Squirrel .nut)
+            yield (name, pak_decompress(raw, usize), 'asset')
+        else:                                          # PNG stored 1:1
+            yield (name, raw, 'asset')
 
 MAGIC = {b'MINK': parse_mink, b'ACZ\x00': parse_acz, b'PACKDATA': parse_packdata}
 

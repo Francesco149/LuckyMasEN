@@ -32,6 +32,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <shellapi.h>
 #include <wincrypt.h>
 #include <schannel.h>
 #include <security.h>
@@ -62,6 +63,7 @@
 static int   g_http_port  = DEF_HTTP_PORT;
 static int   g_https_port = DEF_HTTPS_PORT;
 static int   g_pop_port   = DEF_POP3_PORT;
+static int   g_tray       = 1;          /* show the tray UI (interactive); --no-tray for headless */
 static int   g_tls_ok     = 0;          /* set once Schannel creds are acquired */
 static char  g_exedir[MAX_PATH];
 static char  g_logpath[MAX_PATH];
@@ -130,38 +132,68 @@ static const char *http_reason(int code) {
 static int l_log(lua_State *L)    { logln("lua: %s", luaL_optstring(L, 1, "")); return 0; }
 static int l_exedir(lua_State *L) { lua_pushstring(L, g_exedir); return 1; }
 
-/* Create the Lua state, register the C API, load the script (external <exedir>\gcalsrv.lua
- * if present, else the embedded default), run it, and verify the handlers are defined. */
+/* Register the C API + load gcalsrv.lua (external <exedir> copy if present, else the embedded
+ * default) into L, run it, and verify the handlers are defined. On any failure write a human
+ * message into err[] and return 0 — the caller decides whether to pop an error dialog. */
+static int lua_load_into(lua_State *L, char *err, int errsz) {
+    luaL_openlibs(L);
+    lua_register(L, "gcalsrv_log", l_log);
+    lua_register(L, "gcalsrv_exedir", l_exedir);
+    char path[MAX_PATH];
+    _snprintf(path, sizeof(path), "%s\\gcalsrv.lua", g_exedir);
+    int ext = (luaL_loadfile(L, path) == LUA_OK);
+    if (!ext) {
+        lua_pop(L, 1);   /* drop the loadfile error; fall back to the embedded default */
+        if (luaL_loadbuffer(L, (const char *)GCALSRV_LUA, GCALSRV_LUA_LEN, "gcalsrv.lua") != LUA_OK) {
+            _snprintf(err, errsz, "Couldn't load the script:\n\n%s", lua_tostring(L, -1));
+            return 0;
+        }
+    }
+    if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+        _snprintf(err, errsz, "Error in gcalsrv.lua:\n\n%s", lua_tostring(L, -1));
+        return 0;
+    }
+    lua_getglobal(L, "http_handle");
+    int ok = lua_isfunction(L, -1);
+    lua_pop(L, 1);
+    if (!ok) { _snprintf(err, errsz, "gcalsrv.lua: http_handle() is not defined."); return 0; }
+    logln("LUA: loaded %s", ext ? path : "embedded script");
+    return 1;
+}
+
 static int lua_init(void) {
     g_L = luaL_newstate();
     if (!g_L) { logln("LUA: newstate failed"); return 0; }
-    luaL_openlibs(g_L);
-    lua_register(g_L, "gcalsrv_log", l_log);
-    lua_register(g_L, "gcalsrv_exedir", l_exedir);
     InitializeCriticalSection(&g_lua_lock);
-
-    char path[MAX_PATH];
-    _snprintf(path, sizeof(path), "%s\\gcalsrv.lua", g_exedir);
-    if (luaL_loadfile(g_L, path) == LUA_OK) {
-        logln("LUA: loaded external %s", path);
-    } else {
-        lua_pop(g_L, 1);   /* drop the loadfile error message */
-        if (luaL_loadbuffer(g_L, (const char *)GCALSRV_LUA, GCALSRV_LUA_LEN, "gcalsrv.lua") != LUA_OK) {
-            logln("LUA: load embedded failed: %s", lua_tostring(g_L, -1));
-            return 0;
-        }
-        logln("LUA: loaded embedded script");
-    }
-    if (lua_pcall(g_L, 0, 0, 0) != LUA_OK) {
-        logln("LUA: script init failed: %s", lua_tostring(g_L, -1));
+    char err[600];
+    if (!lua_load_into(g_L, err, sizeof(err))) {
+        logln("LUA: %s", err);
+        if (g_tray) MessageBoxA(NULL, err, "gcal-xp \xe2\x80\x94 Lua error", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
         return 0;
     }
-    lua_getglobal(g_L, "http_handle");
-    int ok = lua_isfunction(g_L, -1);
-    lua_pop(g_L, 1);
-    if (!ok) { logln("LUA: http_handle() not defined"); return 0; }
     logln("LUA: ready");
     return 1;
+}
+
+/* Hot-reload after the user edits gcalsrv.lua: load it into a FRESH state, and only if that
+ * succeeds swap it in under the lock; on error keep serving with the previous script and show
+ * the Lua message. (Driven by watch_thread -> WM_APP_RELOAD on the UI thread.) */
+static void lua_reload(void) {
+    lua_State *nL = luaL_newstate();
+    if (!nL) return;
+    char err[600];
+    if (!lua_load_into(nL, err, sizeof(err))) {
+        logln("LUA reload: %s", err);
+        if (g_tray) MessageBoxA(NULL, err, "gcal-xp \xe2\x80\x94 Lua error (kept the previous script)",
+                                MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
+        lua_close(nL);
+        return;
+    }
+    EnterCriticalSection(&g_lua_lock);
+    lua_State *old = g_L; g_L = nL;
+    LeaveCriticalSection(&g_lua_lock);
+    lua_close(old);
+    logln("LUA: hot-reloaded gcalsrv.lua");
 }
 
 /* XML-escape, the Atom builders, event splitting, scenario/config loading, and the
@@ -660,12 +692,130 @@ static void do_install(void) {
 }
 
 /* ---- main --------------------------------------------------------------------- */
+/* ---- system-tray UI (interactive session; skipped under --no-tray) ------------- */
+#define WM_TRAY        (WM_APP + 1)
+#define WM_APP_RELOAD  (WM_APP + 2)
+#define IDM_OPENLUA    1
+#define IDM_ABOUT      2
+#define IDM_EXIT       3
+
+static HWND            g_tray_wnd = NULL;
+static NOTIFYICONDATAA g_nid;
+
+static const char *ABOUT_TEXT =
+    "gcal-xp \xe2\x80\x94 fake Google server for Lucky*Mas\r\n"
+    "\r\n"
+    "Runs on your PC so the desktop mascots' calendar and mail work with no\r\n"
+    "Google account: it answers as www.google.com over Windows' own 2007 TLS\r\n"
+    "stack, serving calendar events + POP3 mail \xe2\x80\x94 all locally.\r\n"
+    "\r\n"
+    "Set your own events/mail by editing gcalsrv.lua (tray menu \xe2\x86\x92 Open\r\n"
+    "gcalsrv.lua); it hot-reloads when you save.\r\n"
+    "\r\n"
+    "Part of the LuckyMasEN English patch:\r\n"
+    "https://github.com/Francesco149/LuckyMasEN";
+
+/* Open gcalsrv.lua in the default editor; if there's no external copy yet, drop the embedded
+ * default first so the user has something to edit. */
+static void open_lua(HWND h) {
+    char path[MAX_PATH];
+    _snprintf(path, sizeof(path), "%s\\gcalsrv.lua", g_exedir);
+    if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
+        FILE *f = fopen(path, "wb");
+        if (f) { fwrite(GCALSRV_LUA, 1, GCALSRV_LUA_LEN, f); fclose(f); logln("wrote default gcalsrv.lua for editing"); }
+    }
+    ShellExecuteA(h, "open", path, NULL, NULL, SW_SHOWNORMAL);
+}
+
+static LRESULT CALLBACK tray_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+    case WM_TRAY:
+        if (lp == WM_RBUTTONUP || lp == WM_LBUTTONUP) {
+            POINT pt; GetCursorPos(&pt);
+            HMENU m = CreatePopupMenu();
+            AppendMenuA(m, MF_STRING, IDM_OPENLUA, "Open gcalsrv.lua");
+            AppendMenuA(m, MF_STRING, IDM_ABOUT,   "About gcal-xp...");
+            AppendMenuA(m, MF_SEPARATOR, 0, NULL);
+            AppendMenuA(m, MF_STRING, IDM_EXIT,    "Close");
+            SetForegroundWindow(h);                       /* so the menu closes on click-away */
+            TrackPopupMenu(m, TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, pt.x, pt.y, 0, h, NULL);
+            DestroyMenu(m);
+        }
+        return 0;
+    case WM_COMMAND:
+        switch (LOWORD(wp)) {
+        case IDM_OPENLUA: open_lua(h); break;
+        case IDM_ABOUT:   MessageBoxA(h, ABOUT_TEXT, "About gcal-xp", MB_OK | MB_ICONINFORMATION); break;
+        case IDM_EXIT:    Shell_NotifyIconA(NIM_DELETE, &g_nid); PostQuitMessage(0); break;
+        }
+        return 0;
+    case WM_APP_RELOAD:
+        lua_reload();
+        return 0;
+    case WM_DESTROY:
+        Shell_NotifyIconA(NIM_DELETE, &g_nid);
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProcA(h, msg, wp, lp);
+}
+
+/* Poll gcalsrv.lua's mtime (cheap, and unlike a directory change-notification it ignores the
+ * constant gcalsrv.log writes) and ask the UI thread to hot-reload when it changes. */
+static DWORD WINAPI watch_thread(void *arg) {
+    char path[MAX_PATH];
+    _snprintf(path, sizeof(path), "%s\\gcalsrv.lua", g_exedir);
+    FILETIME last = {0, 0};
+    WIN32_FILE_ATTRIBUTE_DATA fad;
+    if (GetFileAttributesExA(path, GetFileExInfoStandard, &fad)) last = fad.ftLastWriteTime;
+    for (;;) {
+        Sleep(1000);
+        if (GetFileAttributesExA(path, GetFileExInfoStandard, &fad) &&
+            CompareFileTime(&fad.ftLastWriteTime, &last) != 0) {
+            last = fad.ftLastWriteTime;
+            Sleep(250);                                   /* let the editor finish writing */
+            if (g_tray_wnd) PostMessageA(g_tray_wnd, WM_APP_RELOAD, 0, 0);
+        }
+    }
+    return 0;                                             /* unreached */
+}
+
+/* Create the hidden window + tray icon, start the file watcher, and run the message loop.
+ * Returns when the user picks Close. */
+static void run_tray(void) {
+    WNDCLASSA wc; ZeroMemory(&wc, sizeof(wc));
+    wc.lpfnWndProc   = tray_proc;
+    wc.hInstance     = GetModuleHandleA(NULL);
+    wc.lpszClassName = "gcalxpTray";
+    RegisterClassA(&wc);
+    g_tray_wnd = CreateWindowA("gcalxpTray", "gcal-xp", WS_OVERLAPPED, 0, 0, 0, 0, NULL, NULL, wc.hInstance, NULL);
+
+    ZeroMemory(&g_nid, sizeof(g_nid));
+    g_nid.cbSize           = sizeof(g_nid);
+    g_nid.hWnd             = g_tray_wnd;
+    g_nid.uID              = 1;
+    g_nid.uFlags           = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    g_nid.uCallbackMessage = WM_TRAY;
+    g_nid.hIcon            = LoadIconA(NULL, (LPCSTR)IDI_APPLICATION);
+    strcpy(g_nid.szTip, "gcal-xp - fake Google for Lucky*Mas");
+    Shell_NotifyIconA(NIM_ADD, &g_nid);
+
+    CreateThread(NULL, 0, watch_thread, NULL, 0, NULL);
+
+    MSG msg;
+    while (GetMessageA(&msg, NULL, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageA(&msg);
+    }
+}
+
 int main(int argc, char **argv) {
     int want_install = 0, want_tls = 1, want_cert = 1;
     for (int i = 1; i < argc; i++) {
         if      (!strcmp(argv[i], "--install"))    want_install = 1;
         else if (!strcmp(argv[i], "--no-tls"))     want_tls = 0;
         else if (!strcmp(argv[i], "--no-cert"))    want_cert = 0;
+        else if (!strcmp(argv[i], "--no-tray"))    g_tray = 0;
         else if (!strcmp(argv[i], "--http")  && i + 1 < argc) g_http_port  = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--https") && i + 1 < argc) g_https_port = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--pop")   && i + 1 < argc) g_pop_port   = atoi(argv[++i]);
@@ -712,7 +862,8 @@ int main(int argc, char **argv) {
         HANDLE ct = CreateThread(NULL, 0, cert_install_thread, NULL, 0, NULL);
         if (ct) CloseHandle(ct);
     }
-    logln("gcalsrv ready (%d listener%s)", nt, nt == 1 ? "" : "s");
-    WaitForMultipleObjects(nt, threads, TRUE, INFINITE);
+    logln("gcalsrv ready (%d listener%s)%s", nt, nt == 1 ? "" : "s", g_tray ? ", tray UI" : " [headless]");
+    if (g_tray) run_tray();                                  /* tray icon + hot-reload; returns on Close */
+    else        WaitForMultipleObjects(nt, threads, TRUE, INFINITE);  /* headless: serve forever */
     return 0;
 }

@@ -45,7 +45,7 @@ MCF=$(nix build nixpkgs#pkgsCross.mingw32.windows.mcfgthreads --no-link --print-
   -Wall -Wextra -Wno-unused-parameter \
   -Wl,--major-subsystem-version=5,--minor-subsystem-version=1 \
   "$here/.luabuild/liblua.a" \
-  -L"$MCF/lib" -lws2_32 -lsecur32 -lcrypt32
+  -L"$MCF/lib" -lws2_32 -lsecur32 -lcrypt32 -luser32 -lshell32
 
 echo "--- built $here/gcalsrv.exe ---"
 ls -l gcalsrv.exe
@@ -53,5 +53,5 @@ ls -l gcalsrv.exe
 # Sanity: the only imported DLLs must be XP system DLLs (no api-ms-win-*, no mcfgthread).
 bad=$(i686-w64-mingw32-objdump -p gcalsrv.exe \
       | grep -i 'DLL Name' \
-      | grep -ivE 'KERNEL32|WS2_32|Secur32|CRYPT32|msvcrt|ADVAPI32|USER32|GDI32' || true)
+      | grep -ivE 'KERNEL32|WS2_32|Secur32|CRYPT32|msvcrt|ADVAPI32|USER32|GDI32|SHELL32' || true)
 if [ -n "$bad" ]; then echo "WARNING: non-XP DLL import(s):"; echo "$bad"; else echo "imports: XP system DLLs only ✓"; fi

@@ -75,26 +75,36 @@ def _erase(im, box, text_is_dark):
             px[x, y] = med
 
 
+def _render_label(text, size, color, stroke, S=4):
+    """Render `text` SUPERSAMPLED (at size*S) onto a tight transparent layer, then downscale by S
+    with Lanczos. Supersampling preserves the font's true advance widths (so thin glyphs like 'l'
+    don't collide with their neighbour the way 12px hinting makes them) and antialiases cleanly.
+    Returns (layer, (w, h))."""
+    font, _ = resolve_font(size * S)
+    probe = ImageDraw.Draw(Image.new('RGBA', (4, 4)))
+    l, t, r, b = probe.textbbox((0, 0), text, font=font, stroke_width=stroke * S)
+    big = Image.new('RGBA', (r - l + 2 * S, b - t + 2 * S), (0, 0, 0, 0))
+    ImageDraw.Draw(big).text((-l + S, -t + S), text, font=font, fill=color,
+                             stroke_width=stroke * S, stroke_fill=color)
+    w, h = max(1, round(big.width / S)), max(1, round(big.height / S))
+    return big.resize((w, h), Image.LANCZOS), (w, h)
+
+
 def retext(im, box, text, size, text_is_dark, color=None, stroke=0, fit=True, dx=0, dy=0):
-    """Erase the JP text in `box` (x0,y0,x1,y1) and draw `text` centered in MS PGothic.
-    `color` defaults to the sampled glyph colour. `stroke` fakes bold. `fit` shrinks the
-    font until the label fits the box width. `dx/dy` nudge the final placement."""
+    """Erase the JP text in `box` (x0,y0,x1,y1) and draw `text` centered in MS PGothic, rendered
+    supersampled. `color` defaults to the sampled glyph colour; `stroke` fakes bold; `fit` shrinks
+    the font until the label fits the box width; `dx/dy` nudge the final placement."""
     if color is None:
         color = sample_text_color(im, box, text_is_dark)
     _erase(im, box, text_is_dark)
-    d = ImageDraw.Draw(im)
     bw = box[2] - box[0]
-    font, _ = resolve_font(size)
-    while fit and size > 6:
-        l, t, r, b = d.textbbox((0, 0), text, font=font, stroke_width=stroke)
-        if (r - l) <= bw:
-            break
+    layer, (w, h) = _render_label(text, size, color, stroke)
+    while fit and size > 6 and w > bw:
         size -= 1
-        font, _ = resolve_font(size)
-    l, t, r, b = d.textbbox((0, 0), text, font=font, stroke_width=stroke)
-    tx = box[0] + (bw - (r - l)) // 2 - l + dx
-    ty = box[1] + ((box[3] - box[1]) - (b - t)) // 2 - t + dy
-    d.text((tx, ty), text, font=font, fill=color, stroke_width=stroke, stroke_fill=color)
+        layer, (w, h) = _render_label(text, size, color, stroke)
+    bx = box[0] + (bw - w) // 2 + dx
+    by = box[1] + ((box[3] - box[1]) - h) // 2 + dy
+    im.alpha_composite(layer, (max(0, bx), max(0, by)))
     return im
 
 

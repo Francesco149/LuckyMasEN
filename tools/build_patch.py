@@ -222,6 +222,19 @@ def op_pak(e, ctx):
             log.append(f"        member {name} <- {m['src']}  ({len(overrides[name])}b)")
         else:
             raise PatchError(f"pak {e['file']}: member {name!r} has neither subs nor src")
+    if e.get('gen') == 'calc_png':                       # retext the baked-in button labels
+        try:
+            import calc_png
+        except ImportError as ex:
+            raise PatchError(f"pak {e['file']}: gen=calc_png needs pillow (flake-provided): {ex}")
+        log.append("        gen  calc_png (baked button labels)")
+        for base in calc_png.SPECS:
+            for nm in calc_png.variants(base):
+                if nm not in members or nm in overrides:
+                    continue
+                new_png, spec, font = calc_png.generate(members[nm], nm)
+                overrides[nm] = new_png
+                log.append(f"            {nm:28} -> {spec['text']!r}  ({font}, {len(new_png)}b)")
     new_pak = repack_packdata(orig, overrides)
     open(path, 'wb').write(new_pak)
     log.append(f"        rebuilt {len(orig)} -> {len(new_pak)}b  ({len(overrides)} member(s) replaced)")

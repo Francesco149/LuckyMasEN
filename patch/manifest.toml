@@ -358,9 +358,15 @@ note = "gcalcore.dll — GoogleAccount dialog (129): title + Cancel"
 # source escape (backslash-n), not a real newline. build_patch asserts every string literal
 # is ASCII after substitution. The button LABELS baked into PNGs are a separate image task.
 # ═════════════════════════════════════════════════════════════════════════════
+# `gen = "calc_png"` ALSO retexts the baked-in button-label PNGs (the 電卓/単位換算 mode tabs,
+# 変換/コピー, 税+/税-, the ページ数 paper-converter rows) from the user's OWN data.pak images:
+# tools/calc_png.py erases each JP glyph run by reconstructing the button gradient per row and
+# redraws an English label in MS PGothic (out/font/msgothic.ttc, builder-supplied → matches the
+# app's font; falls back to a sans if absent). Geometry/text live in calc_png.SPECS; needs pillow.
 [[pak]]
 file = "app/calc/data.pak"
-note = "data.pak — calmain.nut converter strings -> EN ASCII (re-compressed via the cracked .nut codec)"
+gen = "calc_png"
+note = "data.pak — calmain.nut converter strings (.nut codec) + retext baked button labels (calc_png)"
 [[pak.member]]
 name = "calmain.nut"
 encoding = "cp932"

@@ -236,12 +236,12 @@ WP_HEADERS = {
     # darker magenta body (stops sampled from the JP original); white border; the outer glow reuses
     # the gradient's bright stop (a pale glow washes to grey over the green).
     'h2_howto.jpg': dict(text='How to set your wallpaper', box=(6, 2, 180, 35), size=22, align='left', dx=4,
-                         color=(228, 3, 107, 255), fill_grad=((250, 120, 190, 255), (200, 0, 96, 255), 0.33),
+                         color=(228, 3, 107, 255), fill_grad=((250, 120, 190, 255), (200, 0, 96, 255), 0.6),
                          stroke=2, stroke_color=(255, 255, 255, 255), bold=1,
                          glow=3, glow_color=(250, 120, 190, 255), blur=2,
                          erase='tile', tile_box=(6, 0, 180, 37), tile_period=31, tile_clean=181),
     'h2_list.jpg':  dict(text='Wallpaper list', box=(6, 2, 112, 35), size=22, align='left', dx=4,
-                         color=(228, 3, 107, 255), fill_grad=((250, 120, 190, 255), (200, 0, 96, 255), 0.33),
+                         color=(228, 3, 107, 255), fill_grad=((250, 120, 190, 255), (200, 0, 96, 255), 0.6),
                          stroke=2, stroke_color=(255, 255, 255, 255), bold=1,
                          glow=3, glow_color=(250, 120, 190, 255), blur=2,
                          erase='tile', tile_box=(6, 0, 112, 37), tile_period=31, tile_clean=110),

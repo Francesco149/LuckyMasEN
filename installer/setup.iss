@@ -20,6 +20,14 @@
 ; committed/shipped; out/ is gitignored).  Build prereq:
 ;   wine innounp.exe -x -m -d<repo>\out\og-extract <repo>\originals\disc\setup.exe "embedded\*"
 #define OGEmbed "..\out\og-extract\embedded"
+; MS PGothic (msgothic.ttc) — BUILDER-supplied via tools/get_font.py (--ttf / --langpack / --windows /
+; --from-system); we NEVER ship the font (out/ is gitignored). Bundled + installed by the [Code] below so
+; the wizard renders the faithful 586x364 AND the app's serifs get their real face on an XP with no
+; East-Asian language pack.  Build prereq: python3 tools/get_font.py --list-sources
+#define FontFile "..\out\font\msgothic.ttc"
+#if !FileExists(AddBackslash(SourcePath) + FontFile)
+  #error MS PGothic not found at out\font\msgothic.ttc -- run: python3 tools/get_font.py --list-sources
+#endif
 
 [Setup]
 ; AppId is the ASCII uninstall key (kept *-free); AppName is the *-styled display name.
@@ -64,7 +72,10 @@ MinVersion=5.0
 PrivilegesRequired=admin
 
 [Languages]
-Name: "en"; MessagesFile: "compiler:Default.isl"
+; Custom EN .isl carrying MS PGothic 9 / Title 29 / Welcome 12 — drives the faithful 586x364 wizard
+; (the stock compiler:Default.isl = Tahoma 8 -> a smaller 503-wide wizard). PGothic is made available
+; by the [Code] AddFontResource below, so this size holds even on an XP with no East-Asian fonts.
+Name: "en"; MessagesFile: "luckymas-en.isl"
 
 [Messages]
 ; Show the "(D)" accelerator explicitly like the JP original (the English default puts it as a
@@ -80,6 +91,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#Src}\app\*"; DestDir: "{app}"; Excludes: "launcher\Launch.ini.org"; Flags: recursesubdirs ignoreversion
 ; Screensavers -> system32 (the screensaver subsystem enumerates there).
 Source: "{#Src}\sys\*.scr"; DestDir: "{sys}"; Flags: ignoreversion
+; MS PGothic — bundled (dontcopy) so [Code] can AddFontResource it for the wizard + install it to {fonts}.
+Source: "{#FontFile}"; DestDir: "{tmp}"; Flags: dontcopy
 
 [Icons]
 ; Start Menu group = SYGNAS\LuckyMas.  Launcher/calendar need cwd = their own dir
@@ -113,10 +126,40 @@ Filename: "{app}\copy\MinkIt.ini"; Section: "Path"; Key: "Folder"; String: "{app
 
 ; [Run] intentionally omitted — the original's Finish page has no "open folder" option.
 
-; ── Wizard SIZE (the 586x364 faithful look) is driven by the [LangOptions] DIALOG FONT, not [Code]
-; and not the IS version. The original shipped jp.isl (DialogFontName=MS PGothic, DialogFontSize=9;
-; TitleFontSize=29; WelcomeFontSize=12); English Default.isl = Tahoma size 8 → a smaller wizard.
-; FIX: a custom EN .isl carrying the JP fonts (MS PGothic 9 / Title 29 / Welcome 12) with English
-; text → 586x364 (owner-confirmed). Caveat: MS PGothic is a JP font (may be absent on EN XP →
-; fallback). Full plan + the JP-path rename + the IS-5.1.10 port → docs/next-builds.md §Session 9.
-; (The earlier [Code] wizard-resize only moved the outer frame; the inner controls didn't follow.)
+[Code]
+(* MS PGothic delivery (font is BUILDER-supplied -- see the .iss header + tools/get_font.py):
+   (1) InitializeSetup AddFontResources the bundled msgothic.ttc so the WIZARD scales to MS PGothic ->
+       586x364 even on an XP with no East-Asian language pack (proven Session 10: a bundled font lifts
+       the wizard 503->586 via that path);  (2) post-install it installs permanently to the Fonts dir
+       (unless already present) so the APP serifs (CreateFontA "MS PGothic") render right too. *)
+const
+  FONT_REG = 'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts';
+  FONT_KEY = 'MS Gothic & MS PGothic & MS UI Gothic (TrueType)';
+
+function AddFontResource(lpFileName: AnsiString): Integer;
+  external 'AddFontResourceA@gdi32.dll stdcall';
+
+function PGothicPresent(): Boolean;
+begin
+  Result := FileExists(ExpandConstant('{fonts}\msgothic.ttc'))
+            or RegValueExists(HKLM, FONT_REG, FONT_KEY);
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  ExtractTemporaryFile('msgothic.ttc');
+  AddFontResource(ExpandConstant('{tmp}\msgothic.ttc'));   // wizard gets MS PGothic -> 586x364
+  Result := True;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var Dest: String;
+begin
+  if (CurStep = ssPostInstall) and not PGothicPresent() then
+  begin
+    Dest := ExpandConstant('{fonts}\msgothic.ttc');
+    FileCopy(ExpandConstant('{tmp}\msgothic.ttc'), Dest, False);
+    RegWriteStringValue(HKLM, FONT_REG, FONT_KEY, 'msgothic.ttc');
+    AddFontResource(Dest);
+  end;
+end;

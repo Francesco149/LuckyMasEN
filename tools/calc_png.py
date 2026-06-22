@@ -106,8 +106,9 @@ def _render_label(text, size, color, stroke, S=4, stroke_color=None,
         mask = Image.new('L', (W, H), 0)
         ImageDraw.Draw(mask).text((ox, oy), text, font=font, fill=255,
                                   stroke_width=round(bold * S), stroke_fill=255)
-        gtop, gspan = pad, max(1, b - t)
-        ctop, cbot = fill_grad
+        ctop, cbot = fill_grad[0], fill_grad[1]
+        frac = fill_grad[2] if len(fill_grad) > 2 else 1.0          # transition completes in the top `frac`
+        gtop, gspan = pad, max(1, (b - t) * frac)
         col = Image.new('RGBA', (1, H))
         for y in range(H):
             f = min(1.0, max(0.0, (y - gtop) / gspan))
@@ -231,17 +232,18 @@ def generate(png_bytes, member_name):
 # on a green diamond-textured gradient; the JP run is erased by TILING the diamond pattern (period ~31)
 # so the texture continues, then EN is drawn left-aligned. monitor_size is olive text on transparency.
 WP_HEADERS = {
-    # fill = a vertical gradient (brighter pink top -> darker magenta bottom, sampled from the JP
-    # original); white border; a vivid-pink glow (a pale glow washes to grey over the green).
+    # fill = a vertical gradient: a BRIGHT pink highlight in the top 1/3 (frac=0.33) fading to the
+    # darker magenta body (stops sampled from the JP original); white border; the outer glow reuses
+    # the gradient's bright stop (a pale glow washes to grey over the green).
     'h2_howto.jpg': dict(text='How to set your wallpaper', box=(6, 2, 180, 35), size=22, align='left', dx=4,
-                         color=(228, 3, 107, 255), fill_grad=((250, 120, 190, 255), (200, 0, 96, 255)),
+                         color=(228, 3, 107, 255), fill_grad=((250, 120, 190, 255), (200, 0, 96, 255), 0.33),
                          stroke=2, stroke_color=(255, 255, 255, 255), bold=1,
-                         glow=3, glow_color=(255, 120, 198, 255), blur=2,
+                         glow=3, glow_color=(250, 120, 190, 255), blur=2,
                          erase='tile', tile_box=(6, 0, 180, 37), tile_period=31, tile_clean=181),
     'h2_list.jpg':  dict(text='Wallpaper list', box=(6, 2, 112, 35), size=22, align='left', dx=4,
-                         color=(228, 3, 107, 255), fill_grad=((250, 120, 190, 255), (200, 0, 96, 255)),
+                         color=(228, 3, 107, 255), fill_grad=((250, 120, 190, 255), (200, 0, 96, 255), 0.33),
                          stroke=2, stroke_color=(255, 255, 255, 255), bold=1,
-                         glow=3, glow_color=(255, 120, 198, 255), blur=2,
+                         glow=3, glow_color=(250, 120, 190, 255), blur=2,
                          erase='tile', tile_box=(6, 0, 112, 37), tile_period=31, tile_clean=110),
     'monitor_size.gif': dict(text='Your monitor size', box=(2, 1, 201, 21), size=16, dark=True,
                              color=(136, 165, 0, 255), align='center'),

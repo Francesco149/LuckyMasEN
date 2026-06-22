@@ -61,8 +61,8 @@ encoding = "utf-8"
 note = "壁紙えらび.html — English picker UI"
 subs = [
   { from = "<html lang=\"ja\">", to = "<html lang=\"en\">" },
-  { from = "<title>らき☆マス　壁紙えらび</title>", to = "<title>Lucky☆Mas — Wallpaper Picker</title>" },
-  { from = "<h1>らき☆マス　デスクトップアクセサリ</h1>", to = "<h1>Lucky☆Mas Desktop Accessory</h1>" },
+  { from = "<title>らき☆マス　壁紙えらび</title>", to = "<title>Lucky*Mas — Wallpaper Picker</title>" },
+  { from = "<h1>らき☆マス　デスクトップアクセサリ</h1>", to = "<h1>Lucky*Mas Desktop Accessory</h1>" },
   { from = "alt=\"壁紙の設定方法\"", to = "alt=\"How to set your wallpaper\"" },
   { from = "alt=\"壁紙一覧\"", to = "alt=\"Wallpaper list\"" },
   { from = "alt=\"あなたのモニターサイズ\"", to = "alt=\"Your monitor size\"" },
@@ -362,61 +362,59 @@ subs = [ { from = "{install_root_jp}", to = "{install_root_en}" } ]
 # Readme -> English filename (the running app never references it; only the
 # installer's Start-Menu shortcut does → do it with the installer stage).
 [[rename]]
-active = false
 frm = "app/お読みください.txt"
 to  = "app/ReadMe.txt"
-note = "readme -> ReadMe.txt"
+note = "readme -> ReadMe.txt (ACTIVE: installer Start-Menu shortcut + clean EN name)"
 
-# Copy-engine assets (10 .mink) -> romaji. MinkIt.dll opens these via
-# FindFirstFileA (wildcard) per the RE notes, but confirm before activating.
+# Wallpaper picker page -> ASCII name. Launch.exe opens it via ShellExecuteA (Launch.ini Exec004),
+# so the filename must be ASCII for goal #2 (a cp932 name mojibakes on a non-JP locale). text_subst
+# (content TL) runs before this rename in OP_ORDER; the HTML's internal img/lib/JPG refs are unaffected.
 [[rename]]
-active = false
+frm = "app/wallpaper/壁紙えらび.html"
+to  = "app/wallpaper/wallpaper.html"
+note = "壁紙えらび.html -> wallpaper.html (ASCII; Launch.ini Exec004 + Start-Menu shortcut ref it)"
+
+# Copy-engine assets (10 .mink) -> romaji. ACTIVE (Session 8): confirmed MinkIt enumerates by
+# WILDCARD — the literal ASCII "*.mink" is in BOTH MinkIt.exe and MinkIt.dll (no hardcoded JP
+# filenames), so renaming is safe; the displayed animation name IS the filename stem. 5 chars x
+# {copy,dl}. (Owner flagged the JP animation names; this romanizes them.)
+[[rename]]
 frm = "app/copy/かがみ_copy.mink"
 to  = "app/copy/kagami_copy.mink"
 note = ".mink Kagami copy"
-todo = "confirm MinkIt.dll enumerates *.mink by wildcard (Ghidra) — then activate all 10 together"
 [[rename]]
-active = false
 frm = "app/copy/かがみ_dl.mink"
 to  = "app/copy/kagami_dl.mink"
 note = ".mink Kagami dl"
 [[rename]]
-active = false
 frm = "app/copy/こなた_copy.mink"
 to  = "app/copy/konata_copy.mink"
 note = ".mink Konata copy"
 [[rename]]
-active = false
 frm = "app/copy/こなた_dl.mink"
 to  = "app/copy/konata_dl.mink"
 note = ".mink Konata dl"
 [[rename]]
-active = false
 frm = "app/copy/やよい_copy.mink"
 to  = "app/copy/yayoi_copy.mink"
 note = ".mink Yayoi copy"
 [[rename]]
-active = false
 frm = "app/copy/やよい_dl.mink"
 to  = "app/copy/yayoi_dl.mink"
 note = ".mink Yayoi dl"
 [[rename]]
-active = false
 frm = "app/copy/千早_copy.mink"
 to  = "app/copy/chihaya_copy.mink"
 note = ".mink Chihaya copy"
 [[rename]]
-active = false
 frm = "app/copy/千早_dl.mink"
 to  = "app/copy/chihaya_dl.mink"
 note = ".mink Chihaya dl"
 [[rename]]
-active = false
 frm = "app/copy/真_copy.mink"
 to  = "app/copy/makoto_copy.mink"
 note = ".mink Makoto copy"
 [[rename]]
-active = false
 frm = "app/copy/真_dl.mink"
 to  = "app/copy/makoto_dl.mink"
 note = ".mink Makoto dl"

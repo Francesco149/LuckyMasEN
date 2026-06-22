@@ -124,8 +124,8 @@ SPECS = {
     # paper-count converter rows: replace ONLY "ページ数" (x14-65 / x5-56), keep " -> mm".
     # size 20 = PGothic x-height 9px == the original baked "mm" x-height (so "pages" doesn't look
     # out of place next to the tall mm; owner-matched). Comes out ~50px wide, ≈ the JP ページ数 (51px).
-    'conv_btn_select_paper2mm':  dict(text='pages', box=(12, 2, 68, 22), dark=True, size=20),
-    'conv_select_type_paper2mm': dict(text='pages', box=(3, 1, 59, 19), dark=True, size=20),
+    'conv_btn_select_paper2mm':  dict(text='pages', box=(12, 2, 68, 22), dark=True, size=20, dy=1),
+    'conv_select_type_paper2mm': dict(text='pages', box=(3, 1, 59, 19), dark=True, size=20, dy=1),
 }
 
 
@@ -147,7 +147,8 @@ def generate(png_bytes, member_name):
     im = Image.open(io.BytesIO(png_bytes)).convert('RGBA')
     _, font_name = resolve_font(spec['size'])
     retext(im, spec['box'], spec['text'], spec['size'], spec['dark'],
-           color=spec.get('color'), stroke=spec.get('stroke', 0))
+           color=spec.get('color'), stroke=spec.get('stroke', 0),
+           dx=spec.get('dx', 0), dy=spec.get('dy', 0))
     buf = io.BytesIO()
     im.save(buf, 'PNG')
     return buf.getvalue(), spec, font_name

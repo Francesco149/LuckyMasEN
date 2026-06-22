@@ -448,3 +448,50 @@ user-mode PE checksums; binpatch leaves them stale, harmless — `pe_res` re-fix
   future tidy-up (zero the old blob after relocating in `pe_res.patch`) would scrub it — deferred (the
   live rendering was XP-validated in Session 6; not worth touching that path now).
 **⇒ Remaining = owner live-test on XP (the menus/tooltip/messages render EN), then the installer re-wrap.**
+
+## 2026-06-22 — Session 8: host→localhost VALIDATED on real XP (agent-less) + ops cheatsheet
+Operated **agent-less** (xphttpd `:8099` down; SMB only — netexec + smbclient from wslop). Closed the one
+loose end from Session 5: the `host→localhost` + `CN=localhost` cert path was "build side done" but never
+cleanly proven on the box.
+
+- **Found a stale-binary gap.** XP was running an old `gcalsrv.exe` whose log reported `cert CN=www.google.com`
+  (the CN is read live via `CertGetNameStringA` — not hardcoded — so it was real). The committed *source* +
+  `cert_pfx.h` were already `CN=localhost` (openssl-confirmed: CN=localhost, SAN localhost/127.0.0.1/
+  www.google.com/…). `gcalsrv.exe`/`gcalsrv_lua.h` are **gitignored build artifacts** → the deployed binary
+  had drifted from source. Lesson: always `build.sh` before trusting a deployed gcalsrv.
+- **Rebuilt** via `tools/gcal-xp/build.sh` (kept the CN=localhost `cert_pfx.h`; regen lua; imports = XP DLLs only),
+  redeployed, **started agent-less**, and **proved end-to-end**:
+  - server log: `cert CN=localhost` · `gcalsrv ready (3 listeners)` · `cert: install -> CurrentUser\Root: ok`
+    + `LocalMachine\Root: ok` (installed **silently as SYSTEM**, no modal; owner also approved the interactive
+    cert prompt) · `TLS 127.0.0.1: handshake complete` → `POST /accounts/ClientLogin -> 200`.
+  - client (`clientlogin.vbs`, default host=localhost, = gcal.exe's WinINet stack): `URL=https://localhost/…`
+    `STATUS=200 OK` `Auth=EMU_TEST_TOKEN`. ⇒ WinINet **trusts CN=localhost** over TLS to `https://localhost`
+    with **no hosts redirect** (`hosts` = `127.0.0.1 localhost` only). The deliverable's whole TLS layer holds.
+- **Operating-mode discoveries (→ `docs/xp-ops-cheatsheet.md`):** wmiexec inline-command output is flaky →
+  push a **`.bat` that redirects to a file**, then `smbclient get` it. Launching a persistent EXE: **`start`
+  via wmiexec fails silently** (session-0 window station) and **`schtasks /create /f` fails on XP** (`/f` is
+  Vista+); ✅ **direct exec** `netexec -x 'C:\gcal-xp\gcalsrv.exe'` works (GUI-subsystem → `cmd /c` returns at
+  once, process persists). Silent SYSTEM cert install (both Root stores) → useful for the installer stage.
+- **Live GUI test PASSED (owner-driven, owner present):** redeployed the latest `out/patched/` launcher to
+  `C:\lm`, owner drove it. Confirmed on real XP: the **`SerifCallenderSchedule` bubble fires** through the
+  real launcher (full localhost path end-to-end), the **serif font renders clean** (⇒ the held-back
+  `ＭＳ Ｐゴシック` facename stays JP — no patch needed), and the Session-7 EN strings render: right-click
+  menus, the **pin tooltip** ("Drop an app on this button"), the **mail-interval validation** message, and
+  the delete-app confirm.
+- **Two follow-up fixes (owner-requested; done + redeployed + owner-confirmed):**
+  1. **GoogleAccount dialog** — `DIALOG/129` ("GoogleAccount の設定" + "キャンセル") lives in **gcal.exe AND
+     gcalcore.dll**; it was binpatched but never `pe_res`'d, so it stayed JP (it's an RT_DIALOG lang 1041 —
+     NOT locale-controlled, as first suspected). Added a `pe_res` pass to both → "Google Account Settings" /
+     "Cancel" (OK/Email/Password already EN). Sizes unchanged, PEs valid; the other gcal dialogs (102
+     TODO-placeholder, 182 `オン1`×8, MFC 30721) stay untouched (`pe_res` only rewrites blobs with a hit).
+  2. **Star convention** — owner: render the JP `☆`. **Product/franchise NAMES → `*`** (`Lucky*Mas`,
+     `Lucky*Star Calculator`; in the manifest: HTML title/h1, WinCalc About, Launch.ini Title001, readme).
+     **Decorative serif tics → `~`** (in `build_launcher_en.py`; the bubbles carry only decorative stars, no
+     names → `Kyaan~`, `out~`). Filenames stay `*`-free (`*` is illegal in Windows paths → the deferred
+     `.scr` rename target uses "Lucky Star"; display name will use `*` at the future `.scr` pe_res stage).
+- **Known issue — deferred to post-translation polish (owner-flagged, pre-existing in the JP build):** a
+  spurious **empty app-launcher menu** sometimes appears on left-click of the launcher. NOT a TL regression;
+  investigate as extra polish after the translation + installer work.
+- Note: on the test box the right-click "Lucky*Star Calculator" still showed "Lucky Star" because
+  `C:\lm\Launch.ini` is the hand-written test INI (kept for its `[Data]`/`[Calendar]` config), not the
+  patched one — the shipping `out/patched/Launch.ini` carries the `*`. Correct in the build.

@@ -53,6 +53,10 @@ window** that `nircmd savescreenshotfull` (BitBlt) renders as bare desktop. JP i
 automating blindly. Driver helpers: **`tools/deploy-xp.sh`** (the full deploy+drive recipe — SMBv1/**NT1**
 or smbclient times out; blank-Administrator auth; **agent vs SMB-exec** split; **kill+del before
 overwrite**; hosts via pull/filter/push; the protected-root cert modal) + `tools/gcal-xp/test/lm.cmd`.
+When the **agent is down** (SMB-only mode), follow **`docs/xp-ops-cheatsheet.md`** — the validated
+agent-less path: launch persistent EXEs via wmiexec **direct-exec** (NOT `start`/`schtasks /f`, both fail),
+get output via a **pushed `.bat` → file → smbclient-get** (inline exec output is flaky), gcalsrv
+rebuild→deploy→verify lifecycle, and the silent-as-SYSTEM cert install.
 
 ## Boot loop (NixOS ⇄ XP) — recoverable
 - Default boot = NixOS. **Flip into XP:** on the courier run `/root/boot-xp-once.sh`

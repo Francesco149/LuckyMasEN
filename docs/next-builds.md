@@ -289,6 +289,23 @@ All four handoff TODOs done (full detail → [`re-notes.md`](re-notes.md) §"Ses
   text; changing risks serif rendering → **live-test if "MS PGothic" resolves** before touching); MFC
   AppWizard boilerplate + `TODO: <ファイルの説明>` VERSIONINFO placeholder (installer/version-stamp stage).
 
+## ✅ Session 8 (2026-06-22) — host→localhost VALIDATED on real XP (agent-less) + ops cheatsheet
+Operated **agent-less** (xphttpd down; SMB only). Closed Session 5's loose end: the `host→localhost` +
+`CN=localhost` cert path is now **proven on the box**, not just "build side done". Found XP running a
+**stale** `gcalsrv.exe` (`CN=www.google.com`) while source/cert were already `CN=localhost` (the EXE is a
+gitignored artifact → drifted). Rebuilt → redeployed → proved end-to-end: `clientlogin.vbs` →
+`https://localhost` → `STATUS=200` + `Auth=`, server `handshake complete`, cert installed **silently as
+SYSTEM** into both Root stores, `hosts` carries **no** google redirect. New: **`docs/xp-ops-cheatsheet.md`**
+(the agent-less SMB-only recipe — wmiexec direct-exec to launch, `.bat`→file→`smbclient get` for output,
+the `start`/`schtasks /f` pitfalls, gcalsrv lifecycle). Detail → [`re-notes.md`](re-notes.md) §"Session 8".
+**Live GUI test PASSED (owner-driven):** the `SerifCallenderSchedule` bubble fires through the real launcher,
+the serif font renders clean (⇒ the `ＭＳ Ｐゴシック` facename stays JP, no patch), and the Session-7 EN
+strings are confirmed (menus, pin tooltip, mail-interval validation, delete confirm). **+2 follow-up fixes
+(done):** (a) GoogleAccount `DIALOG/129` `pe_res` in **gcal.exe + gcalcore.dll** → "Google Account Settings" /
+"Cancel"; (b) star convention — **NAMES → `*`** (`Lucky*Mas`, `Lucky*Star`), **decorative serif tics → `~`**,
+filenames `*`-free. **Deferred polish (owner-flagged, pre-existing JP bug):** a spurious empty app-launcher
+menu on left-click — investigate after the translation/installer stage.
+
 ## ▶ Next session (post-/clear) — live-test the binary TL, then the installer re-wrap
 Translation surface is now **complete** (PE-resource + hardcoded + serifs all EN; only the deferred
 facenames/boilerplate/`.nut`-codec calc text remain). Two fronts:

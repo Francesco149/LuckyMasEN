@@ -122,9 +122,10 @@ SPECS = {
     'calc_btn_taxin':        dict(text='Tax+',     box=(3, 5, 27, 20), dark=True,  size=10),
     'calc_btn_taxout':       dict(text='Tax-',     box=(3, 5, 27, 20), dark=True,  size=10),
     # paper-count converter rows: replace ONLY "ページ数" (x14-65 / x5-56), keep " -> mm".
-    # size 12 = same as the "Copy" button (owner-matched).
-    'conv_btn_select_paper2mm':  dict(text='pages', box=(12, 4, 68, 20), dark=True, size=12),
-    'conv_select_type_paper2mm': dict(text='pages', box=(3, 2, 60, 18), dark=True, size=12),
+    # size 20 = PGothic x-height 9px == the original baked "mm" x-height (so "pages" doesn't look
+    # out of place next to the tall mm; owner-matched). Comes out ~50px wide, ≈ the JP ページ数 (51px).
+    'conv_btn_select_paper2mm':  dict(text='pages', box=(12, 2, 68, 22), dark=True, size=20),
+    'conv_select_type_paper2mm': dict(text='pages', box=(3, 1, 59, 19), dark=True, size=20),
 }
 
 

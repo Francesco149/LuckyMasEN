@@ -91,7 +91,9 @@ so the mascots' calendar/mail work with no Google account:
 Every file we patch goes through ONE pipeline → spec in `docs/patch-system.md`. `manifest.toml` is the
 single source of truth (one entry per file + op + note; `active=false` = recorded-but-deferred);
 `build_patch.py` mirrors `originals/installed/`→`out/patched/` (gitignored), applies ops, writes
-`PATCH-LOG.txt`. Ops: `xvi`/`text_keys`/`text_subst`/`text_file`/`binpatch`/`rename`. Reproducible.
+`PATCH-LOG.txt`. Ops: `xvi`/`text_keys`/`text_subst`/`text_file`/`binpatch`/`pe_res`/`rename`. Reproducible.
+`pe_res` (`tools/pe_res.py`) **surgically** patches PE-resource menus/dialogs (lang 1041) + does geometry
+overrides — **never `lief.write()`** (it rebuilds the PE and crashes XP). All PE-resource UI is now EN.
 End goal = **English installer re-wrapped from the user's own `setup.exe`** (ISCC under wine; consumes
 `out/patched/`). **Locale rule** (goal #2): app-read text (Launch.ini, `.Xvi` serifs via `*A` APIs) =
 **pure ASCII**; readme = UTF-8+BOM; HTML = UTF-8. **host→localhost** done in `gcalcore.dll`+`gcal.exe`

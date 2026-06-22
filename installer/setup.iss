@@ -16,6 +16,10 @@
 #define MyAppPublisher "SYGNAS"
 #define MyAppURL "http://sygnas.jp/"
 #define Src "..\out\patched"
+; Wizard art lives here, extracted from the user's OWN setup.exe via innounp (SYGNAS art -> NEVER
+; committed/shipped; out/ is gitignored).  Build prereq:
+;   wine innounp.exe -x -m -d<repo>\out\og-extract <repo>\originals\disc\setup.exe "embedded\*"
+#define OGEmbed "..\out\og-extract\embedded"
 
 [Setup]
 ; AppId is the ASCII uninstall key (kept *-free); AppName is the *-styled display name.
@@ -30,6 +34,27 @@ DefaultGroupName=SYGNAS\LuckyMas
 UninstallDisplayName={#MyAppName}
 UninstallDisplayIcon={app}\rakimas.ico
 SetupIconFile={#Src}\app\rakimas.ico
+; --- faithful appearance: the original's Lucky Star wizard art (classic full-image style) ---
+WizardImageFile={#OGEmbed}\WizardImage0.bmp
+WizardSmallImageFile={#OGEmbed}\WizardSmallImage0.bmp
+; Show the art at native aspect (the original isn't horizontally squashed).
+WizardImageStretch=no
+; The original's classic FULL-SCREEN gradient background, with the app name painted top-left.
+; Gradient sampled from the original screenshot: bright blue (top) -> dark blue (bottom).
+WindowVisible=yes
+BackColor=$00FB0000
+BackColor2=$002A0000
+AppCopyright=2007 SYGNAS
+DisableWelcomePage=no
+; Force the Select-Dir + Select-Start-Menu pages even on RE-install. Their default is 'auto', which
+; SKIPS them when a prior install of the same AppId exists -> that was the "missing first steps"
+; (2nd page jumped to the task) and the Ready memo showing only the shortcut.
+DisableDirPage=no
+DisableProgramGroupPage=no
+AllowNoIcons=yes
+AppMutex=http://sygnas.jp/doujin/luckymaster/
+; Post-install info page = a clean, narrow ASCII page (was: the wide/mojibake readme).
+InfoAfterFile=info_after.txt
 OutputDir=..\out\iss-build
 OutputBaseFilename=setup
 Compression=lzma2
@@ -40,6 +65,15 @@ PrivilegesRequired=admin
 
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"
+
+[Messages]
+; Show the "(D)" accelerator explicitly like the JP original (the English default puts it as a
+; plain underlined "&Don't"; the JP shows it in parens).
+NoProgramGroupCheck2=Don't create a Start Menu folder (&D)
+
+[Tasks]
+; The original offered a desktop shortcut for the launcher.
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
 ; The app tree -> {app}.  Launch.ini.org (stale JP backup) is excluded.
@@ -61,6 +95,8 @@ Name: "{group}\Display Properties";    Filename: "{sys}\desk.cpl"
 Name: "{group}\ReadMe";                Filename: "{app}\ReadMe.txt"
 Name: "{group}\SYGNAS Website";        Filename: "{app}\SYGNAS.url"
 Name: "{group}\Uninstall Lucky Mas";   Filename: "{uninstallexe}"
+; Desktop shortcut (the original's optional task).
+Name: "{userdesktop}\Lucky Mas Launcher"; Filename: "{app}\launcher\Launch.exe"; WorkingDir: "{app}\launcher"; Tasks: desktopicon
 
 [INI]
 ; Pin the launcher's menu targets to the actual install dir.  Launch.exe reads these absolute
@@ -75,5 +111,12 @@ Filename: "{app}\launcher\Launch.ini"; Section: "Launch"; Key: "Exec009"; String
 ; MinkIt's animation folder (no MinkIt.ini ships originally -> the EN install writes it; *.mink live here).
 Filename: "{app}\copy\MinkIt.ini"; Section: "Path"; Key: "Folder"; String: "{app}\copy"
 
-[Run]
-Filename: "{app}\ReadMe.txt"; Description: "View the ReadMe"; Flags: postinstall shellexec skipifsilent nowait
+; [Run] intentionally omitted — the original's Finish page has no "open folder" option.
+
+; ── Wizard SIZE (the 586x364 faithful look) is driven by the [LangOptions] DIALOG FONT, not [Code]
+; and not the IS version. The original shipped jp.isl (DialogFontName=MS PGothic, DialogFontSize=9;
+; TitleFontSize=29; WelcomeFontSize=12); English Default.isl = Tahoma size 8 → a smaller wizard.
+; FIX: a custom EN .isl carrying the JP fonts (MS PGothic 9 / Title 29 / Welcome 12) with English
+; text → 586x364 (owner-confirmed). Caveat: MS PGothic is a JP font (may be absent on EN XP →
+; fallback). Full plan + the JP-path rename + the IS-5.1.10 port → docs/next-builds.md §Session 9.
+; (The earlier [Code] wizard-resize only moved the outer frame; the inner controls didn't follow.)

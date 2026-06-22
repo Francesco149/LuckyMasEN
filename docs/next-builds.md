@@ -326,3 +326,76 @@ facenames/boilerplate/`.nut`-codec calc text remain). Two fronts:
 GUI/screenshots). MinkIt needs its `MinkIt.dll` + `.mink` alongside the exe — push them from
 `originals/installed/app/copy/` via smbclient (the netexec clone of `copy\` was flaky), + a `MinkIt.ini`
 (`[Path]Folder=…`).
+
+## ✅ Session 9 (2026-06-22) — English installer re-wrap (Inno) BUILT + faithful-wizard investigation
+The chosen deliverable. An English `setup.exe` re-wrapped from the user's own disc `setup.exe`. **Built,
+installs correctly on real XP** (owner-tested: `{pf}\SYGNAS\LuckyMas`, EN shortcuts, launcher/calendar/MinkIt
+all work). Remaining = the *faithful wizard look* (in progress) + the JP-path rename. Agent is UP (`:8099`),
+so screenshots work (`nircmd savescreenshotfull` for a normal window; the installer is NOT a layered window).
+
+### Toolchain (all under wine, prefix `~/.wine-iss`)
+- **ISCC** installed at: `C:\IS5` (5.6.1 unicode), `C:\IS559` (5.5.9), `C:\IS5110` (**5.1.10 = the original's
+  exact version**). Run: `WINEPREFIX=~/.wine-iss wine "C:\IS5110\ISCC.exe" "Z:<repo>/installer/setup.iss"`.
+- **innounp** at `out/iss-build/innounp/innounp.exe` — decompiles the OG `setup.exe`: `-x -m` extracted the
+  original `install_script.iss` + `embedded\{WizardImage0.bmp,WizardSmallImage0.bmp,InfoAfter.txt,jp.isl}`
+  → `out/og-extract/`. **The wizard BMPs are SYGNAS art → NEVER committed** (gitignored `out/`; the `.iss`
+  references them there, re-extract from the user's own `setup.exe` at build time — prereq noted in the `.iss`).
+- IS installers cached in `out/iss-build/` (`is561u.exe`, `is559.exe`, `is5110.exe`); innounp via bsdtar (RAR5).
+- **TODO: make this reproducible in the flake** (pin the IS + innounp downloads; a `tools/extract-wizard-art.sh`).
+
+### The `.iss` — `installer/setup.iss` (+ `installer/info_after.txt`)
+Reconstructed (innoextract has no `.iss`; innounp gave the original to copy from). Has: `[Setup]` AppName
+`Lucky*Mas Desktop Accessory`, AppId=LuckyMas, `{pf}\SYGNAS\LuckyMas`, **WindowVisible=yes + BackColor
+`$00FB0000`→`$002A0000`** (the full-screen blue gradient sampled from the OG screenshot), WizardImage art,
+WizardImageStretch=no, AppMutex, AllowNoIcons, **AppCopyright=2007 SYGNAS** (shows bottom-right), InfoAfterFile;
+`[Languages]` EN Default.isl; `[Messages]` NoProgramGroupCheck2 with the `(D)` accel; `[Tasks]` desktopicon;
+`[Icons]` the 10 Start-Menu shortcuts (from the OG) + desktop + uninstall; **`[INI]`** pins Launch.ini Exec###
++ MinkIt.ini Folder to `{app}` (Launch.exe reads absolute ANSI paths → `{app}` is ASCII). `DisableDirPage=no`
++ `DisableProgramGroupPage=no` (default `auto` SKIPS them on re-install → that was the "missing first steps").
+Currently targets **IS 5.6.1**; the `[Code]` wizard-resize was REMOVED (dead end — see below).
+
+### ⭐ THE WIZARD-SIZE FINDING (the current open item) — it's the FONT, not the IS version or [Code]
+- OG (JP) wizard = **586×364**; ours (English) = **503×392** (owner-measured). NOT a `[Code]`/version thing
+  (the OG `.iss` has no `[Code]`; IS 5.5.9 & 5.1.10 both render 503 with the English Default.isl).
+- **ROOT CAUSE:** Inno scales the whole wizard to the `[LangOptions]` dialog font. `jp.isl` =
+  **`DialogFontName=ＭＳ Ｐゴシック` (MS PGothic), `DialogFontSize=9`** (+ Title 29, Welcome 12); English
+  `Default.isl` = Tahoma size 8. → a custom EN `.isl` carrying the JP fonts + English text renders **586×364,
+  owner-confirmed "matches 1:1"** (test file: `out/iss-build/luckymas-en.isl` = a copy of 5.1.10's Default.isl
+  with `[LangOptions]` set to `DialogFontName=MS PGothic / DialogFontSize=9 / TitleFontName=MS PGothic /
+  TitleFontSize=29 / WelcomeFontName=MS PGothic / WelcomeFontSize=12`; smoke `out/iss-build/smoke_font.iss`).
+- **⛔ THE OPEN QUESTION (owner is testing):** **does it work on an XP WITHOUT East-Asian language support
+  (no MS PGothic)?** If the font is absent, GDI substitutes it — and the substitute's metrics (not MS
+  PGothic's) likely drive the size → probably back to ~503 (i.e. the faithful size would only appear on
+  systems that have the JP font). **Owner is booting the q9650 (stock XP, NO lang pack) to test** whether
+  MS PGothic exists there and whether the installer still matches.
+- **NOT yet isolated: size-9 vs the font-NAME.** Untested: does *Tahoma 9* (a font present everywhere) alone
+  give 586, or is it MS PGothic's specific metrics? If size-9-alone works → no font dependency (use any font
+  at 9). First thing to try post-clear.
+- **Options if the font dependency is real:** (a) ship/embed MS PGothic (licensing + size), (b) `[Code]`-FORCE
+  the 586×364 layout *and reposition every inner control* (the removed `[Code]` only moved the outer frame so
+  the white panel/buttons didn't follow — see the `eninstaller.png` symptom), (c) accept a locale-dependent
+  size, (d) the owner's idea: "ship with JP-locale fonts but English text in a way that doesn't break on EN
+  locale." The owner wants a deep dive: capture the Win32 window-layout API calls (JP vs EN) and binary-patch
+  to match, if needed.
+
+### Remaining installer work
+1. **Resolve the font/size** per the q9650 result + the Tahoma-9 test (above). Then bake the chosen `.isl`
+   into `setup.iss` (`[Languages] MessagesFile=`).
+2. **Rename the JP file paths** (owner-approved; also goal #2 ASCII). Needed if we stay ANSI 5.1.10; optional
+   if we use Unicode 5.6.1 (which handles JP filenames natively — **note: since the SIZE is font-driven, IS
+   5.6.1 Unicode + the font `.isl` also yields 586×364, so the version downgrade may be unnecessary**). The JP
+   files in `out/patched`: **84 wallpaper JPGs** `らき☆マス_<artist>_<WxH>.jpg` + the **~96 `<a href>`/`<img src>`
+   refs in `app/wallpaper/wallpaper.html`** (rewrite in lockstep) + **4 `.scr`** (manifest deferred renames →
+   ASCII). Artist romaji is derivable from the ASCII `img/thumb_<key>.jpg` keys (araki/arata/asaba/azuma/
+   herada/iso/minamo/miso/miyabi/serip/tanaka/uni/yone + GUNP/ISO already ASCII) by their HTML grouping.
+3. **Port `setup.iss` to IS 5.1.10** *if* staying on it: 5.1.10 rejects `DisableWelcomePage` (welcome always
+   shown), needs `AppVerName`, no `lzma2` (use `lzma`); re-check `DisableDirPage`/`DisableProgramGroupPage`/
+   `WizardImageStretch`/`NoProgramGroupCheck2`. (Decide 5.1.10-ANSI vs 5.6.1-Unicode first per #2.)
+4. Lots is **uncommitted** — commit `installer/setup.iss` + `info_after.txt` + `patch/manifest.toml`
+   (HTML `Lucky☆→Lucky*` fix + active `.mink`/readme/`wallpaper.html` renames) + these docs.
+
+### Also still open (pre-Session-9)
+- **Themed calculators** (task: `WinCalcImas`/`Lucky`): `data.pak` unpacks (`sygnas_unpack.py`) to **111 PNGs +
+  4 `.nut.raw`** (Squirrel source behind a light byte-framing). JP = baked-image PNGs (`btn_mode_kansan` tab,
+  `conv_select_type_paper2mm` + conversion labels, `conv_btn_conv/copy`, rightmost calc buttons) + `.nut`
+  textbox/font. Translate PNGs + crack the `.nut` framing + repack via `sygnas_repack.py`.

@@ -1,32 +1,83 @@
--- gcalsrv.lua — request logic for the らき☆マス native fake-Google server.
+-- gcalsrv.lua — request logic + YOUR calendar/mail content for the らき☆マス
+-- native fake-Google server (gcalsrv.exe). Pure Lua 5.4 (stdlib only).
 --
--- The C host (gcalsrv.c) owns sockets + Schannel TLS + POP3 line framing and the
--- HTTP/1.0 status-line/headers; it calls into here for the *content*:
---   http_handle(method, path, query, body)  -> status:int, ctype:string, body:string
---   pop3_event(verb, arg)                    -> reply:string|nil, action:"send"|"quit"|"drop"
+-- The C host (gcalsrv.c) owns sockets + Schannel TLS + POP3 line framing + the
+-- HTTP/1.0 status line/headers; it calls in here for the *content*:
+--   http_handle(method, path, query, body) -> status:int, ctype:string, body:string
+--   pop3_event(verb, arg)                   -> reply:string|nil, action:"send"|"quit"|"drop"
 -- C exposes:  gcalsrv_log(msg)   gcalsrv_exedir()
 --
--- This is loaded from <exedir>\gcalsrv.lua if present (customise freely — e.g. a real
--- local-calendar backend), else from the copy embedded in the EXE. Pure Lua 5.4 stdlib.
--- Responses match the gcal_emu.py oracle; scenario knobs come from gcal-xp.ini.
+-- ════════════════════════════════════════════════════════════════════════════
+--  ★ CUSTOMISE HERE — what the desktop mascots show. Edit + save; the server
+--    re-reads this file on EVERY request (when run as the external
+--    <exedir>\gcalsrv.lua, which overrides the copy baked into the EXE), so
+--    there's no rebuild or restart — change it, then click the mascot again.
+--
+--  The launcher's right-click menu has "Check Schedule Now" / "Check Mail Now";
+--  what the mascot finds picks her speech bubble:
+--      calendar — today has event(s) -> SerifCallenderSchedule (she reads the titles)
+--                 today is empty      -> SerifCallenderNone   ("no plans today")
+--      mail     — unread > 0          -> SerifMailCheck       ("you've got mail")
+--                 unread = 0          -> SerifMailNone
+--  (To see the *error* bubbles, force them from gcal-xp.ini — see the foot of this file.)
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- Your appointments, keyed by date "YYYY-MM-DD". Each day is a LIST of events;
+-- an event is either a plain title string, or a table to add a time / place:
+--     { title = "Dentist", at = "10:00", where = "Akihabara" }
+-- A date that's absent (or an empty list {}) -> SerifCallenderNone for that day.
+local EVENTS = {
+  ["2026-06-23"] = {
+    { title = "Dentist",           at = "10:00", where = "Akihabara Clinic" },
+    { title = "Lunch with Konata", at = "12:30" },
+    "Buy doujinshi",                                  -- title only -> a default time slot
+  },
+  ["2026-12-30"] = {
+    { title = "Comiket 109 -- Day 1", at = "08:00", where = "Tokyo Big Sight" },
+  },
+}
+
+-- Your inbox, keyed by date "YYYY-MM-DD". Each day is a LIST of messages; a
+-- message is { from = , subject = , body = } (or just a subject string). The
+-- mascot only COUNTS them (Check vs None), but a real POP3 client on :110 can
+-- log in and RETR/read them — so this is a working fake mailbox, not just a count.
+local MAIL = {
+  ["2026-06-23"] = {
+    { from = "konata@lucky.example", subject = "new figs just dropped!!",
+      body = "did you see the new nendoroid? we have to go saturday!!" },
+    { from = "kagami@lucky.example", subject = "did you finish the homework",
+      body = "...you didn't, did you." },
+  },
+}
+
+-- Pretend "today" is this date (to preview a specific day's bubbles no matter
+-- what the PC clock says). nil = use the real system date.
+local TODAY = nil                         -- e.g. "2026-06-23"
+
+-- Calendar identity shown in the feed. The launcher's account + password are
+-- ignored (any login succeeds against this fake server), so these are cosmetic.
+local ACCOUNT  = "you@lucky.example"
+local CALNAME  = "My Calendar"
+local TZOFFSET = "+09:00"                 -- your UTC offset, GData style
+
+-- ════════════════════════════════════════════════════════════════════════════
+--  Engine below — routing + the Google GData / POP3 wire formats. You usually
+--  don't need to touch this; the data above is what you edit.
+-- ════════════════════════════════════════════════════════════════════════════
 
 local EXEDIR = (gcalsrv_exedir and gcalsrv_exedir()) or "."
 local INI    = EXEDIR .. "\\gcal-xp.ini"
 
-local DEFAULTS = {
-  calendar  = "schedule",                              -- schedule | none | error
-  mail      = "check",                                 -- check | none | error | refuse
-  account   = "test@example.com",
-  calname   = "Test Calendar",
-  tzoffset  = "+09:00",
-  events    = "Dentist;Lunch with Konata;Buy doujinshi",
-  mailcount = "3",
-}
-
--- gcal-xp.ini (key=value), re-read per request so the bubble can be flipped live.
-local function load_cfg()
+-- Optional gcal-xp.ini (key=value), re-read per request — lets a TEST HARNESS
+-- force a scenario without editing this script. All keys are optional:
+--   calendar = none | error           -- else: the EVENTS table drives the day
+--   mail     = none | error | refuse  -- else: the MAIL table drives the day
+--   today    = YYYY-MM-DD             -- override the date (like TODAY above)
+--   account / calname / tzoffset      -- override the identity above
+--   events   = A;B;C                  -- override EVENTS for ALL days (flat list)
+--   mailcount = N                     -- override the unread count
+local function load_ini()
   local c = {}
-  for k, v in pairs(DEFAULTS) do c[k] = v end
   local f = io.open(INI, "r")
   if f then
     for line in f:lines() do
@@ -40,6 +91,8 @@ local function load_cfg()
   return c
 end
 
+local function today_str(ini) return ini.today or TODAY or os.date("%Y-%m-%d") end
+
 local ESC = { ["&"] = "&amp;", ["<"] = "&lt;", [">"] = "&gt;", ['"'] = "&quot;" }
 local function xesc(s) return (tostring(s):gsub('[&<>"]', ESC)) end
 
@@ -47,123 +100,143 @@ local ATOM_NS =
   "xmlns='http://www.w3.org/2005/Atom' " ..
   "xmlns:gd='http://schemas.google.com/g/2005' " ..
   "xmlns:gCal='http://schemas.google.com/gCal/2005'"
+local ATOM = "application/atom+xml; charset=UTF-8"
 
--- ';'-separated, space-trimmed, non-empty titles
-local function split_events(s)
-  local t = {}
-  for tok in (s .. ";"):gmatch("(.-);") do
-    tok = tok:match("^%s*(.-)%s*$")
-    if tok ~= "" then t[#t + 1] = tok end
-  end
-  return t
+local function feed_head(title)
+  return { "<?xml version='1.0' encoding='UTF-8'?>", "<feed " .. ATOM_NS .. ">",
+           "  <title type='text'>" .. xesc(title) .. "</title>" }
 end
 
--- the day the launcher asks about: GData start-min if present, else local today
-local function anchor_date(query)
+-- title-only events rotate through these start times (minutes-of-day)
+local DEFAULT_SLOTS = { 9 * 60, 12 * 60 + 30, 15 * 60, 18 * 60 }
+local function norm_event(e, idx)
+  local title, at, where
+  if type(e) == "table" then title, where, at = e.title or "", e.where, e.at
+  else title = tostring(e) end
+  local mins
+  if at then local h, m = at:match("(%d+):(%d+)"); if h then mins = tonumber(h) * 60 + tonumber(m) end end
+  mins = mins or DEFAULT_SLOTS[(idx - 1) % #DEFAULT_SLOTS + 1]
+  return title, mins, where
+end
+
+-- events for a given Y/M/D; ini `events=` overrides for all days (flat list)
+local function events_for(ini, y, m, d)
+  if ini.events then
+    local t = {}
+    for tok in (ini.events .. ";"):gmatch("(.-);") do
+      tok = tok:match("^%s*(.-)%s*$"); if tok ~= "" then t[#t + 1] = tok end
+    end
+    return t
+  end
+  return EVENTS[("%04d-%02d-%02d"):format(y, m, d)] or {}
+end
+
+-- the day the launcher asks about: GData start-min if present, else "today"
+local function anchor_date(ini, query)
   local y, m, d = (query or ""):match("start%-min=(%d%d%d%d)%-(%d%d)%-(%d%d)")
   if y then return tonumber(y), tonumber(m), tonumber(d) end
-  local t = os.date("*t")
-  return t.year, t.month, t.day
+  local yy, mm, dd = today_str(ini):match("(%d+)-(%d+)-(%d+)")
+  return tonumber(yy), tonumber(mm), tonumber(dd)
 end
 
-local function allcalendars(c)
-  -- Event-feed link the client follows. Use localhost so it works BOTH with the
-  -- gcalcore.dll host->localhost byte-patch AND the legacy hosts-redirect (localhost
-  -- always resolves to 127.0.0.1, where our server listens). www.google.com here
-  -- would send the patched client to the REAL Google for the event feed.
-  local href = ("http://localhost/calendar/feeds/%s/private/full"):format(c.account)
-  return table.concat({
-    "<?xml version='1.0' encoding='UTF-8'?>",
-    "<feed " .. ATOM_NS .. ">",
-    "  <title type='text'>Calendar List</title>",
-    "  <entry>",
-    "    <title type='text'>" .. xesc(c.calname) .. "</title>",
-    "    <link rel='alternate' type='application/atom+xml' href='" .. xesc(href) .. "'/>",
-    "    <gCal:color value='#2952A3'/>",
-    "    <gCal:accesslevel value='owner'/>",
-    "    <gCal:selected value='true'/>",
-    "  </entry>",
-    "</feed>", "",
-  }, "\n")
-end
-
-local SLOTS = { { 9, 0, 10, 0 }, { 12, 30, 13, 30 }, { 15, 0, 16, 0 }, { 18, 0, 19, 0 } }
-
-local function events_feed(c, query)
-  local y, m, d = anchor_date(query)
-  local out = {
-    "<?xml version='1.0' encoding='UTF-8'?>",
-    "<feed " .. ATOM_NS .. ">",
-    "  <title type='text'>" .. xesc(c.calname) .. "</title>",
-  }
-  for i, t in ipairs(split_events(c.events)) do
-    local s = SLOTS[(i - 1) % 4 + 1]
-    out[#out + 1] = "  <entry>"
-    out[#out + 1] = "    <title type='text'>" .. xesc(t) .. "</title>"
-    out[#out + 1] = "    <content type='text'>" .. xesc(t) .. "</content>"
-    out[#out + 1] = ("    <gd:when startTime='%04d-%02d-%02dT%02d:%02d:00.000%s' " ..
-                     "endTime='%04d-%02d-%02dT%02d:%02d:00.000%s'/>")
-                    :format(y, m, d, s[1], s[2], c.tzoffset, y, m, d, s[3], s[4], c.tzoffset)
-    out[#out + 1] = "    <gd:where valueString='Akihabara'/>"
-    out[#out + 1] = "    <gd:eventStatus value='http://schemas.google.com/g/2005#event.confirmed'/>"
-    out[#out + 1] = "  </entry>"
-  end
-  out[#out + 1] = "</feed>"
-  out[#out + 1] = ""
+local function allcalendars(ini)
+  local href = ("http://localhost/calendar/feeds/%s/private/full"):format(ini.account or ACCOUNT)
+  local out = feed_head("Calendar List")
+  out[#out + 1] = "  <entry>"
+  out[#out + 1] = "    <title type='text'>" .. xesc(ini.calname or CALNAME) .. "</title>"
+  out[#out + 1] = "    <link rel='alternate' type='application/atom+xml' href='" .. xesc(href) .. "'/>"
+  out[#out + 1] = "    <gCal:color value='#2952A3'/>"
+  out[#out + 1] = "    <gCal:accesslevel value='owner'/>"
+  out[#out + 1] = "    <gCal:selected value='true'/>"
+  out[#out + 1] = "  </entry>"
+  out[#out + 1] = "</feed>"; out[#out + 1] = ""
   return table.concat(out, "\n")
 end
 
-local function empty_feed(c)
-  return table.concat({
-    "<?xml version='1.0' encoding='UTF-8'?>",
-    "<feed " .. ATOM_NS .. ">",
-    "  <title type='text'>" .. xesc(c.calname) .. "</title>",
-    "</feed>", "",
-  }, "\n")
+-- an empty `evs` -> a feed with no <entry> -> the parser counts 0 -> None bubble
+local function events_feed(ini, y, m, d, evs)
+  local tz = ini.tzoffset or TZOFFSET
+  local out = feed_head(ini.calname or CALNAME)
+  for i, e in ipairs(evs) do
+    local title, mins, where = norm_event(e, i)
+    local sh, sm = mins // 60, mins % 60
+    local eh, em = (mins + 60) // 60, (mins + 60) % 60
+    out[#out + 1] = "  <entry>"
+    out[#out + 1] = "    <title type='text'>" .. xesc(title) .. "</title>"
+    out[#out + 1] = "    <content type='text'>" .. xesc(title) .. "</content>"
+    out[#out + 1] = ("    <gd:when startTime='%04d-%02d-%02dT%02d:%02d:00.000%s' " ..
+                     "endTime='%04d-%02d-%02dT%02d:%02d:00.000%s'/>")
+                    :format(y, m, d, sh, sm, tz, y, m, d, eh, em, tz)
+    if where then out[#out + 1] = "    <gd:where valueString='" .. xesc(where) .. "'/>" end
+    out[#out + 1] = "    <gd:eventStatus value='http://schemas.google.com/g/2005#event.confirmed'/>"
+    out[#out + 1] = "  </entry>"
+  end
+  out[#out + 1] = "</feed>"; out[#out + 1] = ""
+  return table.concat(out, "\n")
 end
 
-local ATOM = "application/atom+xml; charset=UTF-8"
-
 function http_handle(method, path, query, body)
-  local c = load_cfg()
-  path = path:gsub("/+$", "")                          -- strip trailing slashes
+  local ini = load_ini()
+  path = path:gsub("/+$", "")
+  local cal_err = (ini.calendar == "error")
   if method == "POST" and path == "/accounts/ClientLogin" then
-    if c.calendar == "error" then return 403, "text/plain; charset=UTF-8", "Error=BadAuthentication\n" end
+    if cal_err then return 403, "text/plain; charset=UTF-8", "Error=BadAuthentication\n" end
     return 200, "text/plain; charset=UTF-8", "SID=emu\nLSID=emu\nAuth=EMU_TEST_TOKEN\n"
   elseif method == "GET" and path == "/calendar/feeds/default/allcalendars/full" then
-    if c.calendar == "error" then return 403, "text/plain", "Forbidden\n" end
-    return 200, ATOM, allcalendars(c)
+    if cal_err then return 403, "text/plain", "Forbidden\n" end
+    return 200, ATOM, allcalendars(ini)
   elseif method == "GET" and path:sub(1, 16) == "/calendar/feeds/" then
-    if c.calendar == "error" then return 403, "text/plain", "Forbidden\n" end
-    local n = (c.calendar == "none") and 0 or #split_events(c.events)
-    return 200, ATOM, (n > 0) and events_feed(c, query) or empty_feed(c)
+    if cal_err then return 403, "text/plain", "Forbidden\n" end
+    local y, m, d = anchor_date(ini, query)
+    local evs = (ini.calendar == "none") and {} or events_for(ini, y, m, d)
+    return 200, ATOM, events_feed(ini, y, m, d, evs)
   elseif method == "GET" and path == "/calendar/event" then
     return 200, "text/html", "<html><body>gcal-xp: add-event template (no-op stub)</body></html>"
   end
   return 404, "text/plain", "Not Found\n"
 end
 
--- POP3: called once per command (verb is upper-cased by C; "CONNECT" = new session).
--- Returns (reply, action); reply may be multi-line (\r\n-joined); C appends the final CRLF.
+-- the inbox for "today" (server date or override); ini `mailcount` overrides the count
+local function inbox(ini)
+  if ini.mailcount then
+    local n = math.tointeger(tonumber(ini.mailcount)) or 0
+    local t = {}
+    for i = 1, (n < 0 and 0 or n) do t[i] = { from = "sender@example", subject = "Message " .. i } end
+    return t
+  end
+  return MAIL[today_str(ini)] or {}
+end
+
+local function msg_text(msg, i)
+  local from = (type(msg) == "table" and msg.from) or "noreply@lucky.example"
+  local subj = (type(msg) == "table" and msg.subject) or tostring(msg)
+  local body = (type(msg) == "table" and msg.body) or ""
+  return ("From: %s\r\nTo: you@lucky.example\r\nSubject: %s\r\nMessage-ID: <msg%04d@gcal-xp>\r\n\r\n%s")
+         :format(from, subj, i, body)
+end
+
+-- POP3: C calls this once per command (verb upper-cased; "CONNECT" = new session).
+-- Returns (reply, action); reply may be multi-line (\r\n-joined), C adds the final CRLF.
 function pop3_event(verb, arg)
-  local c = load_cfg()
+  local ini = load_ini()
   if verb == "CONNECT" then
-    if c.mail == "refuse" then return nil, "drop" end
+    if ini.mail == "refuse" then return nil, "drop" end
     return "+OK gcal-xp POP3 ready", "send"
   end
-  local n = (c.mail == "check") and (math.tointeger(tonumber(c.mailcount)) or 0) or 0
-  if n < 0 then n = 0 end
-  local size = n * 1024
+  local box = (ini.mail == "none") and {} or inbox(ini)
+  local n = #box
+  local total = 0
+  for i = 1, n do total = total + #msg_text(box[i], i) end
   if verb == "USER" then
     return "+OK user accepted", "send"
   elseif verb == "PASS" then
-    if c.mail == "error" then return "-ERR [AUTH] authentication failed", "send" end
+    if ini.mail == "error" then return "-ERR [AUTH] authentication failed", "send" end
     return "+OK mailbox ready", "send"
-  elseif verb == "STAT" then
-    return ("+OK %d %d"):format(n, size), "send"
+  elseif verb == "STAT" then                              -- n>0 -> SerifMailCheck, n=0 -> SerifMailNone
+    return ("+OK %d %d"):format(n, total), "send"
   elseif verb == "LIST" then
-    local t = { ("+OK %d messages (%d octets)"):format(n, size) }
-    for i = 1, n do t[#t + 1] = ("%d 1024"):format(i) end
+    local t = { ("+OK %d messages (%d octets)"):format(n, total) }
+    for i = 1, n do t[#t + 1] = ("%d %d"):format(i, #msg_text(box[i], i)) end
     t[#t + 1] = "."
     return table.concat(t, "\r\n"), "send"
   elseif verb == "UIDL" then
@@ -171,6 +244,20 @@ function pop3_event(verb, arg)
     for i = 1, n do t[#t + 1] = ("%d msg%04d"):format(i, i) end
     t[#t + 1] = "."
     return table.concat(t, "\r\n"), "send"
+  elseif verb == "RETR" then                              -- a real mail client can read the fake messages
+    local i = math.tointeger(tonumber(arg)) or 0
+    if i < 1 or i > n then return "-ERR no such message", "send" end
+    local m = msg_text(box[i], i)
+    return ("+OK %d octets\r\n%s\r\n."):format(#m, m), "send"
+  elseif verb == "TOP" then
+    local i = math.tointeger(tonumber((arg or ""):match("^(%d+)"))) or 0
+    if i < 1 or i > n then return "-ERR no such message", "send" end
+    local hdr = msg_text(box[i], i):match("^(.-)\r\n\r\n") or ""
+    return ("+OK\r\n%s\r\n."):format(hdr), "send"
+  elseif verb == "DELE" then
+    return "+OK message deleted (no-op)", "send"
+  elseif verb == "RSET" then
+    return "+OK", "send"
   elseif verb == "CAPA" then
     return "-ERR no capabilities", "send"
   elseif verb == "QUIT" then

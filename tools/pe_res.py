@@ -69,6 +69,97 @@ def parse_stringtable(data, block_id):
     return out
 
 
+def _ord_or_sz(data, o):
+    """sz_Or_Ord: 0xFFFF + WORD ordinal, else a NUL-terminated UTF-16 string."""
+    if o + 2 > len(data):
+        return ("ord", 0, o)
+    if _u16r(data, o) == 0xFFFF:
+        return ("ord", _u16r(data, o + 2), o + 4)
+    s, o2 = _wsz(data, o)
+    return ("str", s, o2)
+
+
+def _u16r(d, o):
+    return struct.unpack_from("<H", d, o)[0]
+
+
+def _dlg_walk(data, on_title, on_ctrl_text):
+    """Walk a DLGTEMPLATE[EX], calling on_title(str)->str and on_ctrl_text(str)->str.
+    Returns the rebuilt bytes (callbacks may translate; identity callbacks round-trip)."""
+    out = bytearray()
+    o = 0
+    ex = (_u16r(data, 0) == 1 and _u16r(data, 2) == 0xFFFF)
+
+    def emit(a, b):
+        out.extend(data[a:b])
+
+    def emit_oos(o):                                   # copy one sz_Or_Ord verbatim
+        k, v, o2 = _ord_or_sz(data, o); out.extend(data[o:o2]); return o2
+
+    def align4():
+        while len(out) & 3:
+            out.append(0)
+
+    style = _u32(data, 12 if ex else 0)
+    cdit = _u16r(data, 16 if ex else 8)
+    hdr = 26 if ex else 18
+    emit(0, hdr); o = hdr
+    o = emit_oos(o)                                    # menu
+    o = emit_oos(o)                                    # window class
+    title, o = _wsz(data, o)                           # caption (plain sz)
+    nt = on_title(title)
+    out.extend(nt.encode("utf-16-le") + b"\x00\x00")
+    if style & 0x40:                                   # DS_SETFONT
+        n = 6 if ex else 2
+        emit(o, o + n); o += n
+        face, o = _wsz(data, o)
+        out.extend(face.encode("utf-16-le") + b"\x00\x00")
+    for _ in range(cdit):
+        align4()
+        while o & 3:
+            o += 1
+        n = 24 if ex else 18
+        emit(o, o + n); o += n
+        o = emit_oos(o)                                # control class
+        k, v, o = _ord_or_sz(data, o)                  # control text
+        if k == "str":
+            nv = on_ctrl_text(v)
+            out.extend(nv.encode("utf-16-le") + b"\x00\x00")
+        else:
+            out.extend(struct.pack("<HH", 0xFFFF, v))
+        extra = _u16r(data, o); out.extend(struct.pack("<H", extra)); o += 2
+        emit(o, o + extra); o += extra
+    return bytes(out)
+
+
+def parse_dialog(data):
+    """List the translatable strings (caption + control text) of a dialog."""
+    found = []
+    try:
+        _dlg_walk(data, lambda t: (found.append(t) or t) if t else t,
+                  lambda t: (found.append(t) or t) if t else t)
+    except (struct.error, IndexError):
+        pass
+    return found
+
+
+def build_dialog(data, mapping):
+    """Rebuild a dialog, translating caption + control text via `mapping`."""
+    hit = []
+
+    def tr(s):
+        n = mapping.get(s, s)
+        if n != s:
+            hit.append((s, n))
+        return n
+
+    try:
+        nb = _dlg_walk(data, tr, tr)
+    except (struct.error, IndexError):
+        return data, []
+    return nb, hit
+
+
 def utf16_runs(data, minlen=2):
     """crude: printable UTF-16LE runs (for DIALOG, whose structure we don't fully parse)."""
     out, i, cur = [], 0, []
@@ -196,14 +287,16 @@ def patch(inp, outp, mapping):
     rs = next(s for s in secs if s["vaddr"] <= res_rva < s["vaddr"] + s["vsize"])
     base = rs["rawptr"]                                # .rsrc file base
 
+    builders = {RT_MENU: (build_menu, parse_menu), RT_DIALOG: (build_dialog, parse_dialog)}
     hits, remaining = [], []
     append_cur = (rs["vsize"] + 3) & ~3               # append point (file-align slack), 4-byte aligned
     for lf in _res_leaves(d, base):
-        if lf["type"] != RT_MENU:
+        if lf["type"] not in builders:
             continue
+        build, reparse = builders[lf["type"]]
         blob_off = base + (lf["rva"] - rs["vaddr"])
         old = bytes(d[blob_off:blob_off + lf["size"]])
-        new, hit = build_menu(old, mapping)
+        new, hit = build(old, mapping)
         hits += hit
         if new != old:
             if len(new) <= lf["size"]:                # fits in place
@@ -214,12 +307,12 @@ def patch(inp, outp, mapping):
             else:                                     # relocate into .rsrc slack, fix RVA+Size
                 end = base + append_cur + len(new)
                 if end > base + rs["rawsize"]:
-                    raise PatchError("menu won't fit in .rsrc slack (raw growth unimplemented)")
+                    raise PatchError("resource won't fit in .rsrc slack (raw growth unimplemented)")
                 d[base + append_cur:base + append_cur + len(new)] = new
                 _p32(d, lf["de_off"], rs["vaddr"] + append_cur)
                 _p32(d, lf["de_off"] + 4, len(new))
                 append_cur = (append_cur + len(new) + 3) & ~3
-        for t in parse_menu(new):
+        for t in reparse(new):
             if has_jp(t):
                 remaining.append(t)
 
@@ -266,7 +359,7 @@ def dump(path):
                             mark = " *JP*" if has_jp(t) else ""
                             print(f"STR/{sid}/lang{lang.id}\t{t!r}{mark}")
                 elif typ.id == RT_DIALOG:
-                    for n, t in enumerate(utf16_runs(data)):
+                    for n, t in enumerate(parse_dialog(data)):
                         mark = " *JP*" if has_jp(t) else ""
                         print(f"{tag}#{n}\t{t!r}{mark}")
 

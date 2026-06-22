@@ -108,16 +108,18 @@ strings = [
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PE-resource menus (Launch.exe, lang 1041). These are Unicode resources (drawn by
-# the Unicode menu API) so they render on any locale — no ASCII constraint. Keyed by
-# exact JP source string; build_patch warns if a key fails to match (still-JP item).
-# The right-click main menu + the per-app (T)/(D) item menu the owner saw on XP.
-# (Dialogs SETUPDLG/APPNAMEDLG/NEWNAMEDLG + the pin tooltip are the next sub-step.)
+# PE-resource menus + dialogs (Launch.exe, lang 1041). Unicode resources (no ASCII
+# constraint). Keyed by exact JP source string; one map covers RT_MENU + RT_DIALOG
+# (shared strings like ｷｬﾝｾﾙ/Cancel translate once). build_patch warns on unmapped
+# JP. Patched surgically (only these blobs change; dialogs round-trip byte-faithful).
+# Right-click menus + the per-app item menu + the Settings/rename dialogs.
+# (Still JP: the pin/hold-arrow tooltip — not a resource string; RE it as a binpatch.)
 # ─────────────────────────────────────────────────────────────────────────────
 [[pe_res]]
 file = "app/launcher/Launch.exe"
-note = "Launch.exe right-click menus (IDR_MAINMENU + IDR_ITEMMENU)"
+note = "Launch.exe menus (IDR_MAINMENU/IDR_ITEMMENU) + dialogs (SETUPDLG/APPNAMEDLG/NEWNAMEDLG)"
 [pe_res.strings]
+# right-click main menu + per-app item menu
 "今すぐﾒｰﾙをﾁｪｯｸ(&M)" = "Check Mail Now(&M)"
 "今すぐｽｹｼﾞｭｰﾙをﾁｪｯｸ(&C)" = "Check Schedule Now(&C)"
 "常に前面に表示する(&T)" = "Always on Top(&T)"
@@ -125,6 +127,33 @@ note = "Launch.exe right-click menus (IDR_MAINMENU + IDR_ITEMMENU)"
 "終了(&X)" = "Exit(&X)"
 "ﾀｲﾄﾙ変更(&T)..." = "Change Title(&T)..."
 "削除(&D)..." = "Delete(&D)..."
+# APPNAMEDLG (change-title) + NEWNAMEDLG (save-as)
+"ﾀｲﾄﾙ設定" = "Set Title"
+"ﾀｲﾄﾙ(&T):" = "Title(&T):"
+"名前を付けて保存" = "Save As"
+"ｷｬﾝｾﾙ" = "Cancel"
+# SETUPDLG (settings). Labels are kept CONCISE to fit the original (JP-sized) control
+# widths — the EN equivalents would clip/wrap otherwise. (A fuller relayout would mean
+# editing the DLGITEMTEMPLATE geometry; deferred unless the owner wants it.)
+"設定" = "Settings"
+"ｷｬﾗﾌｫﾙﾀﾞ(&F):" = "Folder(&F):"
+"ｷｬﾗ(&D):" = "Char(&D):"
+"起動時にgoogleｶﾚﾝﾀﾞｰをﾁｪｯｸ(&C)" = "Check Google Calendar(&C)"
+"ﾕｰｻﾞ/ﾊﾟｽﾜｰﾄﾞの設定(&Y)..." = "User/Pass(&Y)..."
+"ﾒｰﾙﾁｪｯｸの間隔(&T):" = "Interval(&T):"
+"(分)" = "(min)"
+"起動時にﾒｰﾙをﾁｪｯｸ(&B)" = "Check mail on boot(&B)"
+"ﾒｰﾙｸﾗｲｱﾝﾄ(&E):" = "Client(&E):"
+"ﾒｰﾙ設定(&M):" = "Mail(&M):"
+"POP3ｻｰﾊﾞ(&H):" = "POP3(&H):"
+"ﾎﾟｰﾄ(&N):" = "Port(&N):"
+"ﾃﾞﾌｫﾙﾄ" = "Default"
+"ｱｶｳﾝﾄ名(&A):" = "Acct(&A):"
+"ﾊﾟｽﾜｰﾄﾞ(&P):" = "Pass(&P):"
+"削除(&X)" = "Delete(&X)"
+"上書保存(&U)" = "Save(&U)"
+"名前を付けて保存(&S)" = "Save As(&S)"
+"ｽﾀｰﾄｱｯﾌﾟに登録(&R)" = "Add to Startup(&R)"
 
 # ═════════════════════════════════════════════════════════════════════════════
 # DEFERRED — recorded for the final product; flip active=true once RE-confirmed.

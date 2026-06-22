@@ -30,6 +30,11 @@ __pycache__/
 /tools/gcal-emu/scenario.conf
 /tools/gcal-emu/certs/*.pfx
 
+# gcal-xp build/runtime artifacts (cert_pfx.h IS tracked — generated, reproducible)
+/tools/gcal-xp/gcalsrv.exe
+/tools/gcal-xp/gcalsrv.log
+/tools/gcal-xp/gcal-xp.ini
+
 # Editor / OS
 *.swp
 *~

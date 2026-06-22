@@ -192,3 +192,55 @@ real story; the LuckyMas-relevant findings:
 - **Live infra confirmed this session:** xphttpd agent live at **10.0.10.113:8099** (`/run` ok, XP SP3);
   `ssh root@code.soy` works (LAN tooling, `nix run nixpkgs#netexec`); i686 mingw cross-gcc fetchable via
   `nix … pkgsCross.mingw32.buildPackages.gcc` (cached, ~79 MiB).
+
+---
+
+## 2026-06-22 — Session 4: native server BUILT + Schannel handshake PROVEN on real XP 🎉
+
+Built `tools/gcal-xp/gcalsrv.c` — the native XP-local fake-Google server — and validated it end-to-end
+against the **real XP WinINet/Schannel stack**. **The Schannel side is figured out.**
+
+**What it is.** One self-contained Win32 EXE (i686, XP subsystem 5.1, 80 KB, statically linked → imports
+only XP system DLLs): plain-Winsock **HTTP feeds :80** + **POP3 :110**, **Schannel HTTPS `/accounts/ClientLogin`
+:443**, with the self-signed `www.google.com` cert embedded as a PKCS#12 blob (`cert_pfx.h`). Response logic
+ported from the `gcal_emu.py` oracle; rich per-request file logging (`gcalsrv.log`). Build: `build.sh`
+(mingw via nix). Files: `gcalsrv.c`, `cert_pfx.h`/`embed-pfx.sh`, `build.sh`, `test/clientlogin.vbs`, `README.md`.
+
+**Proven on the live box (10.0.10.113):** an XP **WinINet** client (`MSXML2.XMLHTTP`, the same stack
+`gcal.exe` uses — `test/clientlogin.vbs`) POSTed ClientLogin over TLS and got `STATUS=200` +
+`Auth=EMU_TEST_TOKEN`. Server log: `TLS 127.0.0.1: handshake complete → POST /accounts/ClientLogin → 200`.
+So WinINet↔Schannel handshake **completes**, the self-signed cert is **trusted** (Root install worked), and
+ClientLogin returns `Auth=`. The HTTP Atom feeds (allcalendars list + anchored event feed) + POP3 STAT were
+also verified live. ⇒ the pivot's premise (XP WinINet ↔ XP Schannel = the same 2007 stack → period-accurate
+by construction) is **confirmed**.
+
+**Bugs found + fixed this session (all on the live box):**
+- **PKCS#12 must use XP-legacy PBE.** OpenSSL 3.x defaults to PBES2/AES-256/SHA-256 which XP's
+  `PFXImportCertStore` can't parse → make the PFX with `-legacy -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES
+  -macalg sha1` (`embed-pfx.sh`).
+- **mingw `-lmcfgthread` / XP-safety.** nixpkgs mingw libgcc is `--enable-threads=mcf`; link it via
+  `-L$(nix build …windows.mcfgthreads)/lib -static` → the mcf code is dead-stripped (we use native
+  `CreateThread`, per owner), the EXE imports only XP DLLs (verified, no post-XP API). `-no-pie` = fixed base.
+- **Protected-root MODAL hang.** `CertAddEncodedCertificateToStore(…Root…)` pops XP's "install this root?"
+  confirmation **dialog**, which blocked the single-threaded startup before the listeners bound (owner
+  clicked Yes → it proceeded; cert now in CurrentUser\Root + LocalMachine\Root). Fix: cert install moved to a
+  **background thread** after the listeners are up + a `--no-cert` flag; for unattended installs use
+  certutil/registry (see README TODO).
+- **Crash on a rejected handshake.** `openssl s_client`'s modern ClientHello is rejected by XP's 2007
+  Schannel with `SEC_E_INVALID_TOKEN` (0x80090308) — *not* a problem for real WinINet, but my failure path
+  called `DeleteSecurityContext` on a never-created context → access violation → crash popup. Fix: only delete
+  if a context was created + `SetErrorMode(SEM_NOGPFAULTERRORBOX…)` so a server fault can never block the box.
+- **SYSTEM keyset.** Launched headless via SMB-exec (wmiexec = SYSTEM), `PFXImportCertStore` fails with
+  `NTE_BAD_KEYSET` (0x8009000b); user keyset only works in an interactive session → **fall back to
+  `CRYPT_MACHINE_KEYSET`**. Now works both as the interactive user (deliverable) and as SYSTEM (test).
+
+**Operational lessons (now in CLAUDE.md):** the **xphttpd agent is single-threaded** — a forever-running
+child (e.g. the server) inherits its stdout pipe and **wedges** it. ⇒ drive everything via **SMB-exec
+(`nix run nixpkgs#netexec`)** and reserve the agent for **screenshots only**. The headless server runs fine
+as SYSTEM in session 0 (ports are global; loopback crosses sessions; trust via LocalMachine\Root). TODO:
+fix the agent's single-threadedness, or see if `smbexec -i 1` can run on the interactive desktop.
+
+**Next:** (1) **migrate the request logic to embedded Lua** (owner-directed) — keep C for sockets + Schannel
++ POP3 framing; move routing/Atom/config to Lua (the `http_handle()` seam is already isolated). (2) The one
+remaining end-to-end: drive the actual **`gcal.exe` + launcher** → fire the `SerifCallender*` bubbles (the
+server side is done; this validates the launcher rendering — needs GUI driving in the interactive session).

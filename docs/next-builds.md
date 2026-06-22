@@ -182,3 +182,19 @@ So XP's WinINet will handshake our cert; the native Schannel server reproduces t
 (3) Schannel ClientLogin handshake + in-proc cert install; (4) i686-mingw build (cached on `code` via
 `nix … pkgsCross.mingw32.buildPackages.gcc`), deploy via netexec, drive gcal.exe via the agent, capture
 the Serif bubbles. The `code`-hosted Python path is **retired for the deliverable, kept as the oracle**.
+
+## ✅ Session 4 (2026-06-22) — native server BUILT + Schannel PROVEN on real XP
+Steps 1–3 + the build of step 4 are **done**: `tools/gcal-xp/gcalsrv.c` (one self-contained 80 KB i686 EXE)
+serves HTTP feeds :80 + POP3 :110 (Winsock) + **HTTPS ClientLogin :443 (Schannel)**, cert embedded as an
+XP-legacy PKCS#12 (`cert_pfx.h`). Cross-built via `build.sh` (mingw + nix), deployed + driven on
+**10.0.10.113 via SMB-exec (netexec)**. **Validated live:** a real XP WinINet client (`MSXML2.XMLHTTP` =
+gcal.exe's stack, `test/clientlogin.vbs`) completes the **Schannel handshake**, **trusts** the self-signed
+cert, and gets `Auth=` from ClientLogin (`STATUS=200`); HTTP feeds + POP3 also verified. Full build log,
+the five bugs fixed (legacy-PKCS12, mcfgthread/XP-safety, protected-root modal, handshake-crash, SYSTEM
+keyset), and the SMB-exec-not-the-agent operating rule → [`re-notes.md`](re-notes.md) §"Session 4".
+
+**Remaining:** (A) **migrate the request logic to embedded Lua** (owner-directed; C keeps sockets+Schannel+
+POP3, Lua gets routing/Atom/config — the `http_handle()` seam is already isolated). (B) the final end-to-end:
+drive the real `gcal.exe`/launcher → fire the `SerifCallender*`/`SerifMail*` bubbles (server side done; this
+is launcher-render validation, needs GUI driving). (C) unattended cert install (certutil/registry, no modal)
++ first-run installer (hosts + Startup).

@@ -261,7 +261,9 @@ def main():
         text = '\n'.join(out)
         # ASCII-ize MT smart-punctuation + JP decorations: the app draws serifs via
         # DrawTextA (cp932), so ANY non-ASCII byte mojibakes on a non-JP locale (goal #2).
-        # ☆/★/♪ (cutesy tics) -> ~ ; fullwidth colon/space -> ASCII.
+        # Decorative ☆/★/♪ tics in dialogue -> '~' (the franchise/product NAMES use '*' —
+        # those live in the manifest, not the serifs; the bubbles carry only decorative stars).
+        # Serifs draw via DrawTextA (cp932) so non-ASCII mojibakes on a non-JP locale (goal #2).
         for a, b in (('—', '--'), ('–', '-'), ('…', '...'),
                      ('‘', "'"), ('’', "'"), ('“', '"'), ('”', '"'),
                      ('☆', '~'), ('★', '~'), ('♪', '~'), ('：', ':'), ('　', ' ')):

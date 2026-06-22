@@ -1,11 +1,11 @@
 =====================================================
 
-   Lucky☆Mas  Desktop Accessory
+   Lucky*Mas  Desktop Accessory
 
 =====================================================
 
 Thank you very much for picking up
-"Lucky☆Mas Desktop Accessory"!
+"Lucky*Mas Desktop Accessory"!
 
 This is a collection of accessories made to make
 working at your PC a little more delightful.
@@ -17,7 +17,7 @@ working at your PC a little more delightful.
 When installation finishes, shortcuts are registered in
 the location below, so please launch them from there.
 
-○ Start Menu  >  SYGNAS  >  Lucky☆Mas
+○ Start Menu  >  SYGNAS  >  Lucky*Mas
 
 For the screensavers, please choose them from:
 
@@ -28,7 +28,7 @@ For the screensavers, please choose them from:
 ---------------------------
 You can also uninstall from
 Control Panel  >  Add or Remove Programs
-by selecting "Lucky☆Mas Desktop Accessory".
+by selecting "Lucky*Mas Desktop Accessory".
 
 ---------------------------
 ■ System requirements

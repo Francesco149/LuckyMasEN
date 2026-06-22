@@ -36,7 +36,7 @@ note = "launcher dialogue — 22 characters (Name + Serif* lines)"
 file = "app/launcher/Launch.ini"
 encoding = "cp932"
 note = "Launch.ini — English menu titles (ASCII-safe)"
-keys = { Title000 = "iM@S Calculator", Title001 = "Lucky Star Calculator", Title002 = "Google Calendar", Title003 = "Copy Animation", Title004 = "Wallpaper Picker", Title009 = "Display Properties" }
+keys = { Title000 = "iM@S Calculator", Title001 = "Lucky*Star Calculator", Title002 = "Google Calendar", Title003 = "Copy Animation", Title004 = "Wallpaper Picker", Title009 = "Display Properties" }
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Readme — full English translation. Opened only in Notepad (no app code reads it),
@@ -320,10 +320,29 @@ note = "WinCalc.exe menu (202) + dialogs (About/main/Error/Tax). MFC string tabl
 "税率設定(&T)" = "Tax Rate(&T)"
 "終了(X)" = "Exit(X)"
 "バージョン情報" = "About"
-"らき☆マス電卓" = "Lucky☆Mas Calculator"
+"らき☆マス電卓" = "Lucky*Mas Calculator"
 "エラー" = "Error"
 "税率設定" = "Tax Rate"
 "税率" = "Tax Rate"
+"キャンセル" = "Cancel"
+
+# gcal.exe / gcalcore.dll — the calendar component. Already binpatched (host->localhost + error
+# strings) but never pe_res'd. DIALOG/129 is the Google-account email/password entry the launcher's
+# Settings "User/Pass(&Y)..." button opens — an RT_DIALOG (lang 1041), so it stays JP on ANY locale
+# (NOT locale-controlled, as first suspected). The same dialog 129 lives in BOTH binaries → translate
+# both. (OK/Email/Password are already English; キャンセル also covers gcal.exe's other Cancel buttons.)
+[[pe_res]]
+file = "app/launcher/gcal.exe"
+note = "gcal.exe — GoogleAccount dialog (129): title + Cancel"
+[pe_res.strings]
+"GoogleAccount の設定" = "Google Account Settings"
+"キャンセル" = "Cancel"
+
+[[pe_res]]
+file = "app/launcher/gcalcore.dll"
+note = "gcalcore.dll — GoogleAccount dialog (129): title + Cancel"
+[pe_res.strings]
+"GoogleAccount の設定" = "Google Account Settings"
 "キャンセル" = "Cancel"
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -423,8 +442,8 @@ note = ".scr Chibi Characters"
 [[rename]]
 active = false
 frm = "sys/らき☆マス：らき☆すたコミック.scr"
-to  = "sys/LuckyMas - Lucky☆Star Comic.scr"
-note = ".scr Lucky☆Star Comic"
+to  = "sys/LuckyMas - Lucky Star Comic.scr"
+note = ".scr Lucky Star Comic (filename ASCII; display name uses '*' via future pe_res)"
 
 # Wallpaper JPGs (~90) -> ASCII. Coupled to the 壁紙えらび.html href rewrite.
 [[rename]]

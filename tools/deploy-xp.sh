@@ -62,7 +62,7 @@ launcher)
     '[Calendar]' 'Boot=1' '[Mail]' 'Boot=0' \
     '[Launch]' \
     'Exec000=C:\lm\calc\WinCalcImas.exe'   'Title000=iM@S Calculator' \
-    'Exec001=C:\lm\calc\WinCalcLucky.exe'  'Title001=Lucky Star Calculator' \
+    'Exec001=C:\lm\calc\WinCalcLucky.exe'  'Title001=Lucky*Star Calculator' \
     'Exec002=C:\lm\gcal.exe'               'Title002=Google Calendar' \
     'Exec003=C:\lm\copy\MinkIt.exe'        'Title003=Copy Animation' \
     'Exec004=C:\lm\wallpaper.html'         'Title004=Wallpaper Picker' \

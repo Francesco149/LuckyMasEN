@@ -76,7 +76,7 @@ def _erase(im, box, text_is_dark):
 
 
 def _render_label(text, size, color, stroke, S=4, stroke_color=None,
-                  glow=0, glow_color=None, blur=0, bold=0):
+                  glow=0, glow_color=None, blur=0, bold=0, fill_grad=None):
     """Render `text` SUPERSAMPLED (at size*S) onto a tight transparent layer, then downscale by S
     with Lanczos. Supersampling preserves the font's true advance widths (so thin glyphs like 'l'
     don't collide with their neighbour the way 12px hinting makes them) and antialiases cleanly.
@@ -102,8 +102,20 @@ def _render_label(text, size, color, stroke, S=4, stroke_color=None,
     if stroke_color and stroke > 0:                                 # outline silhouette around the (bolded) fill
         d.text((ox, oy), text, font=font, fill=stroke_color,
                stroke_width=round((stroke + bold) * S), stroke_fill=stroke_color)
-    d.text((ox, oy), text, font=font, fill=color,                   # fill, fattened by `bold`
-           stroke_width=round(bold * S), stroke_fill=color)
+    if fill_grad:                                                   # vertical gradient fill (top -> bottom)
+        mask = Image.new('L', (W, H), 0)
+        ImageDraw.Draw(mask).text((ox, oy), text, font=font, fill=255,
+                                  stroke_width=round(bold * S), stroke_fill=255)
+        gtop, gspan = pad, max(1, b - t)
+        ctop, cbot = fill_grad
+        col = Image.new('RGBA', (1, H))
+        for y in range(H):
+            f = min(1.0, max(0.0, (y - gtop) / gspan))
+            col.putpixel((0, y), tuple(round(ctop[k] + (cbot[k] - ctop[k]) * f) for k in range(4)))
+        big.paste(col.resize((W, H)), (0, 0), mask)
+    else:
+        d.text((ox, oy), text, font=font, fill=color,               # solid fill, fattened by `bold`
+               stroke_width=round(bold * S), stroke_fill=color)
     w, h = max(1, round(W / S)), max(1, round(H / S))
     return big.resize((w, h), Image.LANCZOS), (w, h)
 
@@ -139,7 +151,7 @@ def tile_erase(im, box, period, clean_start):
 
 def retext(im, box, text, size, text_is_dark, color=None, stroke=0, fit=True, dx=0, dy=0,
            align='center', erase='rowmedian', vrows=None,
-           stroke_color=None, glow=0, glow_color=None, blur=0, bold=0):
+           stroke_color=None, glow=0, glow_color=None, blur=0, bold=0, fill_grad=None):
     """Erase the JP text in `box` (x0,y0,x1,y1) and draw `text` in MS PGothic, rendered supersampled.
     `color` defaults to the sampled glyph colour. `stroke`+`stroke_color` = an outline; `glow`+
     `glow_color`+`blur` = a soft halo behind (the wallpaper headers' magenta fill / white border /
@@ -156,7 +168,8 @@ def retext(im, box, text, size, text_is_dark, color=None, stroke=0, fit=True, dx
     else:
         _erase(im, box, text_is_dark)
     bw = box[2] - box[0]
-    kw = dict(stroke_color=stroke_color, glow=glow, glow_color=glow_color, blur=blur, bold=bold)
+    kw = dict(stroke_color=stroke_color, glow=glow, glow_color=glow_color, blur=blur, bold=bold,
+              fill_grad=fill_grad)
     layer, (w, h) = _render_label(text, size, color, stroke, **kw)
     while fit and align == 'center' and size > 6 and w > bw:
         size -= 1
@@ -218,13 +231,17 @@ def generate(png_bytes, member_name):
 # on a green diamond-textured gradient; the JP run is erased by TILING the diamond pattern (period ~31)
 # so the texture continues, then EN is drawn left-aligned. monitor_size is olive text on transparency.
 WP_HEADERS = {
+    # fill = a vertical gradient (brighter pink top -> darker magenta bottom, sampled from the JP
+    # original); white border; a vivid-pink glow (a pale glow washes to grey over the green).
     'h2_howto.jpg': dict(text='How to set your wallpaper', box=(6, 2, 180, 35), size=22, align='left', dx=4,
-                         color=(228, 3, 107, 255), stroke=2, stroke_color=(255, 255, 255, 255), bold=1,
-                         glow=3, glow_color=(252, 205, 228, 255), blur=2,
+                         color=(228, 3, 107, 255), fill_grad=((250, 120, 190, 255), (200, 0, 96, 255)),
+                         stroke=2, stroke_color=(255, 255, 255, 255), bold=1,
+                         glow=3, glow_color=(255, 120, 198, 255), blur=2,
                          erase='tile', tile_box=(6, 0, 180, 37), tile_period=31, tile_clean=181),
     'h2_list.jpg':  dict(text='Wallpaper list', box=(6, 2, 112, 35), size=22, align='left', dx=4,
-                         color=(228, 3, 107, 255), stroke=2, stroke_color=(255, 255, 255, 255), bold=1,
-                         glow=3, glow_color=(252, 205, 228, 255), blur=2,
+                         color=(228, 3, 107, 255), fill_grad=((250, 120, 190, 255), (200, 0, 96, 255)),
+                         stroke=2, stroke_color=(255, 255, 255, 255), bold=1,
+                         glow=3, glow_color=(255, 120, 198, 255), blur=2,
                          erase='tile', tile_box=(6, 0, 112, 37), tile_period=31, tile_clean=110),
     'monitor_size.gif': dict(text='Your monitor size', box=(2, 1, 201, 21), size=16, dark=True,
                              color=(136, 165, 0, 255), align='center'),
@@ -240,7 +257,8 @@ def apply_header(im, member_name):
     retext(im, spec['box'], spec['text'], spec['size'], spec.get('dark', False),
            color=spec.get('color'), stroke=spec.get('stroke', 0), stroke_color=spec.get('stroke_color'),
            glow=spec.get('glow', 0), glow_color=spec.get('glow_color'), blur=spec.get('blur', 0),
-           bold=spec.get('bold', 0), align=spec.get('align', 'center'), dx=spec.get('dx', 0), dy=spec.get('dy', 0),
+           bold=spec.get('bold', 0), fill_grad=spec.get('fill_grad'),
+           align=spec.get('align', 'center'), dx=spec.get('dx', 0), dy=spec.get('dy', 0),
            erase='none' if spec.get('erase') == 'tile' else spec.get('erase', 'rowmedian'),
            vrows=spec.get('vrows'), fit=(spec.get('align') != 'left'))
     return spec

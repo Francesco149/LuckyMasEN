@@ -48,12 +48,14 @@ probe)
   ;;
 
 launcher)
+  echo ">>> stop any running launcher first (it locks C:\\lm)"
+  agent 'taskkill /f /im Launch.exe 2>nul & taskkill /f /im gcal.exe 2>nul & echo STOPPED'
   echo ">>> clone install -> C:\\lm (short path dodges the JP dir name)"
   smbexec 'rd /s /q C:\lm 2>nul & for /d %i in ("C:\Program Files\SYGNAS\*") do xcopy "%~si\launcher" C:\lm\ /E /I /Y >nul & echo CLONED'
-  echo ">>> overlay the patched launcher (localhost binaries + EN .Xvi) + a test Launch.ini"
+  echo ">>> overlay the patched launcher (EN-menu Launch.exe + localhost binaries + EN .Xvi) + test Launch.ini"
   stage="$(mktemp -d)"
   cp "$REPO"/out/patched/app/launcher/gcalcore.dll "$REPO"/out/patched/app/launcher/gcal.exe \
-     "$REPO"/out/patched/app/launcher/*.Xvi "$stage/"
+     "$REPO"/out/patched/app/launcher/Launch.exe "$REPO"/out/patched/app/launcher/*.Xvi "$stage/"
   printf '%s\r\n' \
     '[Window]' 'X=480' 'Y=140' 'TopMost=1' \
     '[Data]' 'Chara=hiyori.Xvi' 'Folder=C:\lm' \

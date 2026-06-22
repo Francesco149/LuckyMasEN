@@ -14,7 +14,7 @@ and, for the faithful font, the builder-supplied out/font/msgothic.ttc (else fal
 sans on PATH, logged). PIL is imported lazily by the caller.
 """
 import os
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _FONT_CACHE = {}
@@ -75,34 +75,88 @@ def _erase(im, box, text_is_dark):
             px[x, y] = med
 
 
-def _render_label(text, size, color, stroke, S=4):
+def _render_label(text, size, color, stroke, S=4, stroke_color=None,
+                  glow=0, glow_color=None, blur=0):
     """Render `text` SUPERSAMPLED (at size*S) onto a tight transparent layer, then downscale by S
     with Lanczos. Supersampling preserves the font's true advance widths (so thin glyphs like 'l'
     don't collide with their neighbour the way 12px hinting makes them) and antialiases cleanly.
-    Returns (layer, (w, h))."""
+    `stroke` (final px) draws an outline in `stroke_color` (default=color). `glow` (final px) draws
+    a blurred halo in `glow_color` BEHIND everything (e.g. the wallpaper headers' magenta fill +
+    white border + pink glow). All sizes are pre-downscale (final) px. Returns (layer, (w, h))."""
     font, _ = resolve_font(size * S)
     probe = ImageDraw.Draw(Image.new('RGBA', (4, 4)))
-    l, t, r, b = probe.textbbox((0, 0), text, font=font, stroke_width=stroke * S)
-    big = Image.new('RGBA', (r - l + 2 * S, b - t + 2 * S), (0, 0, 0, 0))
-    ImageDraw.Draw(big).text((-l + S, -t + S), text, font=font, fill=color,
-                             stroke_width=stroke * S, stroke_fill=color)
-    w, h = max(1, round(big.width / S)), max(1, round(big.height / S))
+    l, t, r, b = probe.textbbox((0, 0), text, font=font)            # glyph bbox, no stroke
+    pad = (max(stroke, glow) + blur + 1) * S
+    W, H = (r - l) + 2 * pad, (b - t) + 2 * pad
+    ox, oy = pad - l, pad - t
+    big = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    if glow and glow_color:
+        gl = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(gl).text((ox, oy), text, font=font, fill=glow_color,
+                                stroke_width=glow * S, stroke_fill=glow_color)
+        if blur:
+            gl = gl.filter(ImageFilter.GaussianBlur(blur * S))
+        big.alpha_composite(gl)
+    ImageDraw.Draw(big).text((ox, oy), text, font=font, fill=color,
+                             stroke_width=stroke * S, stroke_fill=stroke_color or color)
+    w, h = max(1, round(W / S)), max(1, round(H / S))
     return big.resize((w, h), Image.LANCZOS), (w, h)
 
 
-def retext(im, box, text, size, text_is_dark, color=None, stroke=0, fit=True, dx=0, dy=0):
-    """Erase the JP text in `box` (x0,y0,x1,y1) and draw `text` centered in MS PGothic, rendered
-    supersampled. `color` defaults to the sampled glyph colour; `stroke` fakes bold; `fit` shrinks
-    the font until the label fits the box width; `dx/dy` nudge the final placement."""
+def _erase_vinterp(im, box, top, bot):
+    """Rebuild the box by vertically interpolating each column between two clean text-free rows
+    (`top`/`bot`, just above/below the glyphs). Preserves a horizontal gradient and — unlike a
+    per-row median — never samples the JPEG chroma fringe that haloes white-on-colour text."""
+    px = im.load()
+    x0, y0, x1, y1 = box
+    span = (bot - top) or 1
+    for x in range(x0, x1):
+        ct, cb = px[x, top], px[x, bot]
+        for y in range(y0, y1):
+            t = (y - top) / span
+            px[x, y] = tuple(round(ct[k] + (cb[k] - ct[k]) * t) for k in range(len(ct)))
+
+
+def tile_erase(im, box, period, clean_start):
+    """Replace `box` with the background's repeating texture (e.g. the wallpaper headers' diamonds)
+    copied phase-aligned from the nearest clean region to the right (`clean_start`+): each column x
+    is taken from x + period*k (smallest k landing in clean texture), so the pattern continues
+    seamlessly instead of a flat fill. `period` = the horizontal repeat in px (trial-and-error)."""
+    import math
+    orig = im.copy()
+    px, opx = im.load(), orig.load()
+    x0, y0, x1, y1 = box
+    for x in range(x0, x1):
+        xs = x + period * max(1, math.ceil((clean_start - x) / period))
+        for y in range(y0, y1):
+            px[x, y] = opx[xs, y]
+
+
+def retext(im, box, text, size, text_is_dark, color=None, stroke=0, fit=True, dx=0, dy=0,
+           align='center', erase='rowmedian', vrows=None,
+           stroke_color=None, glow=0, glow_color=None, blur=0):
+    """Erase the JP text in `box` (x0,y0,x1,y1) and draw `text` in MS PGothic, rendered supersampled.
+    `color` defaults to the sampled glyph colour. `stroke`+`stroke_color` = an outline; `glow`+
+    `glow_color`+`blur` = a soft halo behind (the wallpaper headers' magenta fill / white border /
+    pink glow). `fit` shrinks the font until it fits the box width (center only). `align` 'center'|
+    'left' (left text may extend right onto already-correct background). `erase` 'rowmedian' (per-row
+    median — gradients/buttons) or 'vinterp' with `vrows=(top,bot)` (interpolate two clean rows —
+    avoids the JPEG fringe on white/coloured-on-gradient headers). `dx/dy` nudge placement."""
     if color is None:
         color = sample_text_color(im, box, text_is_dark)
-    _erase(im, box, text_is_dark)
+    if erase == 'none':                                  # caller already cleared the bg (e.g. tile_erase)
+        pass
+    elif erase == 'vinterp' and vrows:
+        _erase_vinterp(im, box, vrows[0], vrows[1])
+    else:
+        _erase(im, box, text_is_dark)
     bw = box[2] - box[0]
-    layer, (w, h) = _render_label(text, size, color, stroke)
-    while fit and size > 6 and w > bw:
+    kw = dict(stroke_color=stroke_color, glow=glow, glow_color=glow_color, blur=blur)
+    layer, (w, h) = _render_label(text, size, color, stroke, **kw)
+    while fit and align == 'center' and size > 6 and w > bw:
         size -= 1
-        layer, (w, h) = _render_label(text, size, color, stroke)
-    bx = box[0] + (bw - w) // 2 + dx
+        layer, (w, h) = _render_label(text, size, color, stroke, **kw)
+    bx = box[0] + dx if align == 'left' else box[0] + (bw - w) // 2 + dx
     by = box[1] + ((box[3] - box[1]) - h) // 2 + dy
     im.alpha_composite(layer, (max(0, bx), max(0, by)))
     return im
@@ -152,3 +206,36 @@ def generate(png_bytes, member_name):
     buf = io.BytesIO()
     im.save(buf, 'PNG')
     return buf.getvalue(), spec, font_name
+
+
+# ── wallpaper-picker section headers (loose img/*.jpg|.gif, driven by build_patch's [[img_text]]) ──
+# The h2 bars are a magenta fill + white border + soft pink glow title (sampled from the JP original)
+# on a green diamond-textured gradient; the JP run is erased by TILING the diamond pattern (period ~31)
+# so the texture continues, then EN is drawn left-aligned. monitor_size is olive text on transparency.
+WP_HEADERS = {
+    'h2_howto.jpg': dict(text='How to set your wallpaper', box=(6, 2, 180, 35), size=22, align='left', dx=4,
+                         color=(228, 3, 107, 255), stroke=2, stroke_color=(255, 255, 255, 255),
+                         glow=3, glow_color=(252, 205, 228, 255), blur=2,
+                         erase='tile', tile_box=(6, 0, 180, 37), tile_period=31, tile_clean=181),
+    'h2_list.jpg':  dict(text='Wallpaper list', box=(6, 2, 112, 35), size=22, align='left', dx=4,
+                         color=(228, 3, 107, 255), stroke=2, stroke_color=(255, 255, 255, 255),
+                         glow=3, glow_color=(252, 205, 228, 255), blur=2,
+                         erase='tile', tile_box=(6, 0, 112, 37), tile_period=31, tile_clean=110),
+    'monitor_size.gif': dict(text='Your monitor size', box=(2, 1, 201, 21), size=16, dark=True,
+                             color=(136, 165, 0, 255), align='center'),
+}
+
+
+def apply_header(im, member_name):
+    """Translate one wallpaper-header image in place per WP_HEADERS (tile-erase the textured JP run if
+    asked, then draw EN). Returns the spec (for logging)."""
+    spec = WP_HEADERS[member_name]
+    if spec.get('erase') == 'tile':
+        tile_erase(im, spec['tile_box'], spec['tile_period'], spec['tile_clean'])
+    retext(im, spec['box'], spec['text'], spec['size'], spec.get('dark', False),
+           color=spec.get('color'), stroke=spec.get('stroke', 0), stroke_color=spec.get('stroke_color'),
+           glow=spec.get('glow', 0), glow_color=spec.get('glow_color'), blur=spec.get('blur', 0),
+           align=spec.get('align', 'center'), dx=spec.get('dx', 0), dy=spec.get('dy', 0),
+           erase='none' if spec.get('erase') == 'tile' else spec.get('erase', 'rowmedian'),
+           vrows=spec.get('vrows'), fit=(spec.get('align') != 'left'))
+    return spec

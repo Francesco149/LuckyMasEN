@@ -40,7 +40,7 @@ from sygnas_unpack import parse_acz, parse_packdata         # (parse_packdata: p
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OP_ORDER = ['xvi', 'text_keys', 'text_subst', 'text_file', 'binpatch', 'pe_res', 'pak',
-            'rename', 'rename_map']
+            'img_text', 'rename', 'rename_map']
 
 
 class PatchError(Exception):
@@ -254,6 +254,35 @@ def op_rename(e, ctx):
     return [f"    mv   {e['frm']}  ->  {e['to']}"]
 
 
+def op_img_text(e, ctx):
+    """Translate baked-in text on a LOOSE image file (not a .pak member) — for the wallpaper
+    section-header bars. Styling/geometry live in calc_png.WP_HEADERS (keyed by basename): the JP
+    run is tile-erased (texture preserved) and EN drawn over it, from the user's OWN image. Format
+    preserved (JPEG re-encoded q92; GIF kept with 1-bit transparency)."""
+    try:
+        import calc_png
+        from PIL import Image
+    except ImportError as ex:
+        raise PatchError(f"img_text {e['file']}: needs pillow (flake-provided): {ex}")
+    path = os.path.join(ctx['out'], tmpl(e['file'], ctx['meta']))
+    name = os.path.basename(e['file'])
+    if name not in calc_png.WP_HEADERS:
+        raise PatchError(f"img_text {e['file']}: no calc_png.WP_HEADERS spec for {name!r}")
+    im = Image.open(path).convert('RGBA')
+    spec = calc_png.apply_header(im, name)
+    log = [f"    img_text {e['file']}  -> {spec['text']!r}"]
+    ext = os.path.splitext(path)[1].lower()
+    if ext in ('.jpg', '.jpeg'):
+        im.convert('RGB').save(path, 'JPEG', quality=92)
+    elif ext == '.gif':                                  # 1-bit alpha: reserve palette idx 255 = transparent
+        p = im.convert('RGB').quantize(colors=255)
+        p.paste(255, (0, 0), im.split()[3].point(lambda a: 255 if a < 128 else 0))
+        p.save(path, 'GIF', transparency=255)
+    else:
+        im.save(path, 'PNG')
+    return log
+
+
 def op_rename_map(e, ctx):
     """Bulk-rename files in `dir` matching `glob` by applying a shared substring map to their
     NAMES, and rewrite the SAME substrings inside a `refs` text file (the page that links them) —
@@ -288,7 +317,7 @@ def op_rename_map(e, ctx):
 
 OPS = {'xvi': op_xvi, 'text_keys': op_text_keys, 'text_subst': op_text_subst,
        'text_file': op_text_file, 'binpatch': op_binpatch, 'pe_res': op_pe_res,
-       'pak': op_pak, 'rename': op_rename, 'rename_map': op_rename_map}
+       'pak': op_pak, 'img_text': op_img_text, 'rename': op_rename, 'rename_map': op_rename_map}
 
 
 def build(originals, out, manifest_path):

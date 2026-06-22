@@ -397,6 +397,23 @@ subs = [
   { from = "入力：", to = "Input: " },
 ]
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Wallpaper-picker baked-text section headers (loose img/*.jpg|.gif, not in a container).
+# The 壁紙の設定方法 / 壁紙一覧 bars are a magenta+white-border+pink-glow title on a green
+# diamond-textured gradient; あなたのモニターサイズ is olive on transparency. build_patch's
+# img_text op tile-erases the JP run (preserving the diamond texture) and draws EN — styling
+# in tools/calc_png.WP_HEADERS (keyed by basename). The HTML alt text was already translated.
+# ─────────────────────────────────────────────────────────────────────────────
+[[img_text]]
+file = "app/wallpaper/img/h2_howto.jpg"
+note = "壁紙の設定方法 -> How to set your wallpaper (magenta/white/glow on diamonds)"
+[[img_text]]
+file = "app/wallpaper/img/h2_list.jpg"
+note = "壁紙一覧 -> Wallpaper list"
+[[img_text]]
+file = "app/wallpaper/img/monitor_size.gif"
+note = "あなたのモニターサイズ -> Your monitor size (olive on transparency)"
+
 # ═════════════════════════════════════════════════════════════════════════════
 # DEFERRED — recorded for the final product; flip active=true once RE-confirmed.
 # (The engine logs these as DEFERRED in PATCH-LOG.txt but does not apply them.)

@@ -330,3 +330,27 @@ silent install). The stale `gcalsrv.c` log line now reads the cert CN instead of
 
 **Remaining:** PE-resource TL (the menus/tooltip above + the rename dialogs `APPNAMEDLG`/`NEWNAMEDLG`); the
 `.Xvi` ASCII pass; the POP3 mail bubble; then the **installer re-wrap** (ISCC under wine).
+
+### PE-resource translation — `Launch.exe` menus + dialogs DONE (owner-validated on real XP)
+New tool `tools/pe_res.py` (+ a `pe_res` op in `build_patch.py`): dumps and **surgically** patches PE-resource
+strings (RT_MENU + RT_DIALOG, lang 1041), keyed by exact JP source string (one map per binary; shared strings
+like ｷｬﾝｾﾙ/Cancel translate once). PE-resource text is **Unicode** (drawn by the Unicode menu/dialog APIs) →
+renders on any locale, no ASCII constraint (unlike the ANSI-drawn `.Xvi` serifs / Launch.ini).
+- **🩹 Do NOT use `lief.write()` to repackage these PEs.** It rebuilds the whole PE (adds a 5th section,
+  +114 KB) and the result **crashes on XP** — the Settings dialog crashed even though lief preserved every
+  resource leaf **byte-identical** (16/16 non-menu leaves unchanged). So the structural rebuild is the
+  culprit, not the resource content. Fix: a **surgical** patcher — rewrite only the changed menu/dialog blobs
+  (in place, or appended into `.rsrc`'s file-alignment slack), and fix just that data-entry's (RVA,Size) +
+  `.rsrc` VirtualSize + SizeOfImage + the PE checksum. Result: **file size unchanged, ~hundreds of bytes
+  differ, every other byte (all dialogs/imports/relocs) identical** → no collateral breakage. The labels are
+  `id=0xFFFF` (IDC_STATIC) so target controls by **index**, not id, if ever doing geometry.
+- **DLGTEMPLATE/DLGTEMPLATEEX parser+rebuilder** in `pe_res.py` — round-trips **byte-identical** with an empty
+  map (the faithfulness test gating the patcher). Handles sz_Or_Ord, DS_SETFONT, DWORD-aligned items, EX.
+- **Translated:** IDR_MAINMENU + IDR_ITEMMENU; SETUPDLG (settings), APPNAMEDLG (set title), NEWNAMEDLG (save
+  as) — 31 strings. **Layout note:** the JP controls are sized tight; EN labels clip/wrap, so SETUPDLG labels
+  are kept **concise to fit the original widths** (Folder / Char / Interval / Client / Host→POP3 / Acct / Pass
+  …). A full relayout = editing DLGITEMTEMPLATE geometry (by index); deferred unless wanted.
+- **Still JP (next):** the pin/hold-arrow **tooltip** (not a resource → a hardcoded string; RE + binpatch),
+  and the other binaries' resources — `MinkIt.exe` (ABOUTDLG/PREVIEWDLG/SETUPDLG), `WinCalc.exe` (menu +
+  dialogs + **RT_STRING** table 3601–3838 → needs a string-table builder), the 4 `.scr` (config + the Screen
+  Saver display name). Deploy/drive recipe in `tools/deploy-xp.sh`.

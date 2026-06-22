@@ -45,9 +45,10 @@ first RE pass (both need the same recon).
 | Path | What |
 |---|---|
 | `flake.nix` | the whole toolchain — `nix develop` (ghidra, rizin/cutter, wrestool, pev, imhex, wine, qemu, xdelta3, python+construct/lief/pillow) |
-| `docs/` | RE log (`re-notes.md`) + the reverse-engineered `mink-format.md` spec |
-| `tools/` | our extractors / patcher / launcher (the redistributable tooling) |
-| `patch/` | the translation data (string tables) + generated patch delta |
+| `docs/` | RE log (`re-notes.md`), the `mink-format.md` spec, and `patch-system.md` (the reproducible patch) |
+| `tools/` | extractors + the patch engine `build_patch.py` + the native server `gcal-xp/` (the redistributable tooling) |
+| `patch/` | the patch sources + **`manifest.toml`** — the single source of truth for every file we patch |
+| `out/` | **gitignored** — the built patched English tree (`build_patch.py` output) + `PATCH-LOG.txt` |
 | `originals/` | **gitignored** — owner's own RE input (disc rip + cracked installer payload) |
 
 ## Quick start

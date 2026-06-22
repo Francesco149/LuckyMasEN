@@ -10,6 +10,10 @@
 /extracted/
 /scratch/
 
+# Reproducible-patch build output (tools/build_patch.py). Contains originals' bytes
+# for passthrough files → derived-from-originals → never redistribute.
+/out/
+
 # Test loops
 /.wine/
 /wineprefix/

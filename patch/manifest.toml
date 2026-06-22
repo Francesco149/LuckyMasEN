@@ -1,0 +1,220 @@
+# patch/manifest.toml — the single source of truth for EVERYTHING we patch.
+#
+# Consumed by tools/build_patch.py, which mirrors the user's own
+# originals/installed/ tree into out/patched/ and then applies these ops, emitting
+# out/patched/PATCH-LOG.txt (the generated audit). We never ship SYGNAS bytes — only
+# this manifest + the engine + the patch/ sources are redistributable.
+#
+# Paths in `file`/`glob`/`frm`/`to` are relative to the install-tree root
+# (originals/installed/ == app/ + sys/). Paths in `src` are relative to the repo root.
+# String fields are templated with {install_root_jp} / {install_root_en} below.
+# Any op may set `active = false` to record intent without applying (logged DEFERRED).
+
+[meta]
+install_root_jp = "らき☆マス"          # JP install dir (under C:\Program Files\SYGNAS\)
+install_root_en = "LuckyMas"            # English replacement (used by the installer re-wrap)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Launcher speech — repack each translated cp932 Ini back into its ACZ (.Xvi).
+# 22 characters × (Name + 8 Serif lines). Source: tools/build_launcher_en.py.
+# ─────────────────────────────────────────────────────────────────────────────
+[[xvi]]
+glob = "app/launcher/*.Xvi"
+src  = "patch/launcher/{stem}.ini"
+note = "launcher dialogue — 22 characters (Name + Serif* lines)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Launcher right-click menu — English item titles. Paths (Exec###) are left
+# untouched so a deploy onto the current JP install still launches; the install-
+# root path rewrite is deferred below (installer stage pins the dir).
+# LOCALE-SAFETY: Launch.exe reads this via GetPrivateProfileStringA (ANSI), so on a
+# non-JP-locale box (project goal #2) any non-ASCII byte mojibakes. Keep titles
+# PURE ASCII — hence "Lucky Star" not "Lucky☆Star". (Same rule applies to the .Xvi
+# serifs, drawn via DrawTextA; a few still carry ☆ → ASCII-pass is a follow-up.)
+# ─────────────────────────────────────────────────────────────────────────────
+[[text_keys]]
+file = "app/launcher/Launch.ini"
+encoding = "cp932"
+note = "Launch.ini — English menu titles (ASCII-safe)"
+keys = { Title000 = "iM@S Calculator", Title001 = "Lucky Star Calculator", Title002 = "Google Calendar", Title003 = "Copy Animation", Title004 = "Wallpaper Picker", Title009 = "Display Properties" }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Readme — full English translation. Opened only in Notepad (no app code reads it),
+# so emit UTF-8 + BOM (utf-8-sig): XP Notepad detects the BOM and renders ☆/×/■/○
+# correctly on ANY locale (unlike cp932, which would mojibake on a non-JP box).
+# ─────────────────────────────────────────────────────────────────────────────
+[[text_file]]
+file = "app/お読みください.txt"
+src  = "patch/text/readme-en.txt"
+encoding = "utf-8-sig"
+crlf = true
+note = "readme (お読みください.txt) — English translation (UTF-8 BOM)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Wallpaper picker page — English UI text only. The <h2> section headers are baked
+# into JPGs (image edit, deferred) and the artist credits stay in JP; all 96
+# <a href>/<img src> refs are preserved verbatim (JPG renames are deferred below).
+# ─────────────────────────────────────────────────────────────────────────────
+[[text_subst]]
+file = "app/wallpaper/壁紙えらび.html"
+encoding = "utf-8"
+note = "壁紙えらび.html — English picker UI"
+subs = [
+  { from = "<html lang=\"ja\">", to = "<html lang=\"en\">" },
+  { from = "<title>らき☆マス　壁紙えらび</title>", to = "<title>Lucky☆Mas — Wallpaper Picker</title>" },
+  { from = "<h1>らき☆マス　デスクトップアクセサリ</h1>", to = "<h1>Lucky☆Mas Desktop Accessory</h1>" },
+  { from = "alt=\"壁紙の設定方法\"", to = "alt=\"How to set your wallpaper\"" },
+  { from = "alt=\"壁紙一覧\"", to = "alt=\"Wallpaper list\"" },
+  { from = "alt=\"あなたのモニターサイズ\"", to = "alt=\"Your monitor size\"" },
+  { from = "<li>壁紙にしたい絵を選びます。</li>", to = "<li>Choose the picture you want as your wallpaper.</li>" },
+  { from = "<li>PCのモニターサイズに近い画像サイズをクリックします。</li>", to = "<li>Click the image size closest to your monitor's resolution.</li>" },
+  { from = "<li>絵が表示されたらマウスの右クリックメニューから「背景に設定」を選びます。<br>（Firefoxの場合は「デスクトップの背景に設定」）</li>", to = "<li>When the picture opens, right-click it and choose \"Set as Background\".<br>(In Firefox: \"Set As Desktop Background\".)</li>" },
+  { from = "<p>お使いのモニターサイズは</p>", to = "<p>Your monitor's resolution is</p>" },
+  { from = "</strong>です。", to = "</strong>." },
+  { from = "一番上に戻る", to = "Back to top" },
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Calendar client redirect — point gcalcore.dll off www.google.com to our local
+# server WITHOUT a hosts blackhole (so the XP box keeps real Google/internet).
+# The host appears as a wide (UTF-16LE) string TWICE: the bare host (used by the
+# ClientLogin/feed CHttpConnection) and inside the allcalendars full URL. Both are
+# whole NUL-terminated strings replaced in place and NUL-padded (localhost is
+# shorter). The event-feed link the server returns is already localhost (gcalsrv.lua),
+# and the cert is regenerated CN=localhost (make-xp-cert.sh) so WinINet's TLS name
+# check passes. Drop the XP hosts line after applying.
+# ─────────────────────────────────────────────────────────────────────────────
+[[binpatch]]
+file = "app/launcher/gcalcore.dll"
+wide = true
+note = "gcalcore.dll — calendar host www.google.com -> localhost (no hosts redirect)"
+strings = [
+  { old = "www.google.com", new = "localhost" },
+  { old = "http://www.google.com/calendar/feeds/default/allcalendars/full", new = "http://localhost/calendar/feeds/default/allcalendars/full" },
+]
+
+# gcal.exe carries the SAME host/feed strings (host, allcalendars URL) plus the
+# browser add-event deep-link. Patch all three so nothing reaches the real Google
+# once the hosts redirect is gone. (Launch.exe has only bare "google"/"POP3" labels —
+# no connectable host; the POP3 mail host comes from Launch.ini [Mail], deferred.)
+[[binpatch]]
+file = "app/launcher/gcal.exe"
+wide = true
+note = "gcal.exe — calendar host/feed + add-event deep-link -> localhost"
+strings = [
+  { old = "www.google.com", new = "localhost" },
+  { old = "http://www.google.com/calendar/feeds/default/allcalendars/full", new = "http://localhost/calendar/feeds/default/allcalendars/full" },
+  { old = "http://www.google.com/calendar/event?action=TEMPLATE&dates=%4d%02d%02d/%4d%02d%02d", new = "http://localhost/calendar/event?action=TEMPLATE&dates=%4d%02d%02d/%4d%02d%02d" },
+]
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEFERRED — recorded for the final product; flip active=true once RE-confirmed.
+# (The engine logs these as DEFERRED in PATCH-LOG.txt but does not apply them.)
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Install-root path rewrite in Launch.ini's absolute Exec### paths.
+[[text_subst]]
+active = false
+file = "app/launcher/Launch.ini"
+encoding = "cp932"
+note = "Launch.ini exec paths: {install_root_jp} -> {install_root_en}"
+todo = "needs Launch.exe path-resolution RE; the EN installer pins {app}=...\\SYGNAS\\{install_root_en}. Activating now would break launching against the current JP install."
+subs = [ { from = "{install_root_jp}", to = "{install_root_en}" } ]
+
+# Readme -> English filename (the running app never references it; only the
+# installer's Start-Menu shortcut does → do it with the installer stage).
+[[rename]]
+active = false
+frm = "app/お読みください.txt"
+to  = "app/ReadMe.txt"
+note = "readme -> ReadMe.txt"
+
+# Copy-engine assets (10 .mink) -> romaji. MinkIt.dll opens these via
+# FindFirstFileA (wildcard) per the RE notes, but confirm before activating.
+[[rename]]
+active = false
+frm = "app/copy/かがみ_copy.mink"
+to  = "app/copy/kagami_copy.mink"
+note = ".mink Kagami copy"
+todo = "confirm MinkIt.dll enumerates *.mink by wildcard (Ghidra) — then activate all 10 together"
+[[rename]]
+active = false
+frm = "app/copy/かがみ_dl.mink"
+to  = "app/copy/kagami_dl.mink"
+note = ".mink Kagami dl"
+[[rename]]
+active = false
+frm = "app/copy/こなた_copy.mink"
+to  = "app/copy/konata_copy.mink"
+note = ".mink Konata copy"
+[[rename]]
+active = false
+frm = "app/copy/こなた_dl.mink"
+to  = "app/copy/konata_dl.mink"
+note = ".mink Konata dl"
+[[rename]]
+active = false
+frm = "app/copy/やよい_copy.mink"
+to  = "app/copy/yayoi_copy.mink"
+note = ".mink Yayoi copy"
+[[rename]]
+active = false
+frm = "app/copy/やよい_dl.mink"
+to  = "app/copy/yayoi_dl.mink"
+note = ".mink Yayoi dl"
+[[rename]]
+active = false
+frm = "app/copy/千早_copy.mink"
+to  = "app/copy/chihaya_copy.mink"
+note = ".mink Chihaya copy"
+[[rename]]
+active = false
+frm = "app/copy/千早_dl.mink"
+to  = "app/copy/chihaya_dl.mink"
+note = ".mink Chihaya dl"
+[[rename]]
+active = false
+frm = "app/copy/真_copy.mink"
+to  = "app/copy/makoto_copy.mink"
+note = ".mink Makoto copy"
+[[rename]]
+active = false
+frm = "app/copy/真_dl.mink"
+to  = "app/copy/makoto_dl.mink"
+note = ".mink Makoto dl"
+
+# Screensavers (4 .scr). Visible name comes from a PE-resource string (deferred);
+# they install to system32 → handle with the installer stage.
+[[rename]]
+active = false
+frm = "sys/らき☆マス：アイマス3D.scr"
+to  = "sys/LuckyMas - iM@S 3D.scr"
+note = ".scr iM@S 3D"
+todo = "rename + PE-resource display-name TL + system32 install all belong to the installer/PE-res stages"
+[[rename]]
+active = false
+frm = "sys/らき☆マス：アイマスコミック.scr"
+to  = "sys/LuckyMas - iM@S Comic.scr"
+note = ".scr iM@S Comic"
+[[rename]]
+active = false
+frm = "sys/らき☆マス：ちびキャラズ.scr"
+to  = "sys/LuckyMas - Chibi Characters.scr"
+note = ".scr Chibi Characters"
+[[rename]]
+active = false
+frm = "sys/らき☆マス：らき☆すたコミック.scr"
+to  = "sys/LuckyMas - Lucky☆Star Comic.scr"
+note = ".scr Lucky☆Star Comic"
+
+# Wallpaper JPGs (~90) -> ASCII. Coupled to the 壁紙えらび.html href rewrite.
+[[rename]]
+active = false
+note = "wallpaper JPGs らき☆マス_<artist>_<WxH>.jpg -> LuckyMas_... (~90 files)"
+todo = "must rewrite the 96 <a href>/<img src> refs in 壁紙えらび.html in lockstep; artist segments need romaji too"
+
+# Other deferred surface (no-op placeholders, tracked here so nothing is lost):
+#  - MinkIt copy-engine path config: NO MinkIt.ini ships → RE where MinkIt.dll
+#    reads its folder; the EN path likely gets written by the installer.
+#  - autorun.inf: trivial; regenerated by the installer re-wrap stage.
+#  - PE-resource UI strings (lang 1041) in the 4 exes + 4 .scr → future pe-res op.

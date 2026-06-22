@@ -4,7 +4,8 @@ Reverse-engineered from the 2007 「らき☆マス」disc (MSVC-2005 native bin
 **simple little-endian chunk/file directories** — none is the undocumented dead-end the scope doc
 feared. Offsets below are verified against the real files in `originals/installed/`.
 
-Status: **directory layouts solved.** Open: the per-blob **codec** (see [§Compression](#compression)).
+Status: **directory layouts solved; the ACZ text + PACKDATA `.nut` codecs are cracked.** Open: only
+the `.mink` `a0`/`m0` **sprite** codec (carries no text — doesn't gate the TL).
 
 ---
 
@@ -95,8 +96,10 @@ off   size  field
 Contents histogram: **111 × `.png` + 4 × `.nut`**.
 - PNGs: stored uncompressed (uncomp == stored).
 - **`*.nut` = Squirrel scripts** (`calculator.nut` head `FF 2F 2A 20 8C 76 8E 5A` = `\xFF` + `/* 計算`)
-  — **compressed** (stored 0x8BB < uncomp 0x2056). The calculator's logic *and its display strings*
-  live here → a prime translation target once decompressed.
+  — **compressed** with the calc LZSS (stored 0x8BB < uncomp 0x2056; ✅ cracked, see [§Compression](#compression--packdata-nut--a-second-lzss--cracked)).
+  `calmain.nut` carries the converter's display strings → translated. The button LABELS are baked
+  into the `.png` skins (the 電卓/単位換算 tabs, 変換/コピー, 税+/税-, ページ数) → retexted by
+  `tools/calc_png.py` (build_patch `[[pak]] gen`).
 
 ---
 
@@ -109,18 +112,27 @@ files (`tools/sygnas_unpack.py`): ring buffer **N=4096**, max match **F=18**, **
 simply the **first flag byte** — the opening 8 tokens are all literals because the ring is still
 "empty", so it's not a separate marker. Each `Ini` decodes to exactly its recorded `usize`, clean Shift-JIS.
 
-Two blobs use **different, not-yet-cracked codecs** (both open with a stray flag byte but diverge
-under Okumura at the first back-reference):
-- **PACKDATA `*.nut`** (calc Squirrel) — Okumura reproduces the literal prefix
-  (`/* 計算機クラス(ベース) */ class …`) then diverges and overshoots `usize` → a different LZSS
-  tuning/codec. **Off the TL critical path** (the calc UI is in WinCalc.exe's PE string-table + the
-  PNG button skins in `data.pak`), so deferred.
-- **`.mink` `a0`/`m0`** (sprite + mask) — Okumura yields a run of `0x20` (ring-init leakage) → **not**
-  this codec. A separate sprite stream (`38 47 03 01 21 13 47 04 …`, header identical across all
-  files). Carries no translatable text → deferred (a sprite-editing nicety; doesn't gate the TL).
+## Compression — PACKDATA `.nut` = a second LZSS (✅ cracked)
 
-**To crack `.nut`/`.mink`:** decompile the decode routine in `MinkIt.dll` / `WinCalc.exe` (both
-MSVC-2005, unstripped, cdecl) in Ghidra — now faster than black-box brute-forcing.
+The calc `data.pak` `*.nut` (Squirrel) use a **different LZSS** from the ACZ text codec — same
+"`0xFF` = first all-literal flag byte" opening, but the bits are read **MSB-first** and the
+back-reference is packed differently. Byte-exact on all four `.nut` (`tools/sygnas_unpack.pak_decompress`;
+encoder `tools/sygnas_repack.pak_compress`):
+- a control byte's 8 bits are consumed **MSB-first**; bit **set = literal** (one byte),
+  bit **clear = a 2-byte match token** `(b0, b1)`:
+  - `length   = (b0 & 0x0F) + 2`           (2..17)
+  - `distance = ((b0 >> 4) | (b1 << 4)) + 1`  (1..4096 — a 12-bit window; the low 4 distance bits sit
+    in `b0`'s **high** nibble, the high 8 in `b1`, which is why a single contiguous bit-split misses it)
+  - the copy is **overlap-capable** (RLE: `length` may exceed `distance`).
+
+`calmain.nut` holds the converter tool's display strings (note-length / fps / paper-thickness) →
+translated to ASCII via build_patch's `[[pak]]` op; `calculator/calimas/callucky.nut` are comments-only.
+
+Still open — **`.mink` `a0`/`m0`** (sprite + mask): Okumura yields a run of `0x20` (ring-init
+leakage) → **not** that codec; a separate sprite stream (`38 47 03 01 21 13 47 04 …`, header
+identical across all files). Carries no translatable text → deferred (a sprite-editing nicety;
+doesn't gate the TL). **To crack it:** decompile the decode routine in `MinkIt.dll` (MSVC-2005,
+unstripped, cdecl) in Ghidra.
 
 ## Tooling
 

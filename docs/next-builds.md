@@ -438,3 +438,27 @@ screenshot agent can retire. Both done; a 3rd front (q9650 as the no-PGothic tes
   auto-install didn't bring up networking (likely a signing prompt blocked it while owner was AFK), and with no
   working NIC + no agent + no WoL on the G41 it's unreachable → **needs a power-cycle to NixOS**, then finish the
   NIC (the correct signed v5.836 driver is staged at `C:\drivers\nic`) + validate the PGothic bundle there.
+
+## ✅ Session 11 (2026-06-22) — themed-calculator translation (the last TL surface) + installer accel fix
+The remaining untranslated user-facing surface — the iM@S / Lucky*Star themed calculators — is now EN.
+Detail → [`re-notes.md`](re-notes.md) §"Session 11"; format → [`mink-format.md`](mink-format.md) §Compression.
+
+- **Cracked the `data.pak` `.nut` LZSS** (was "deferred / different codec" since Session 1): MSB-first
+  flags, set=literal; match token `len=(b0&0x0f)+2`, `dist=((b0>>4)|(b1<<4))+1` (12-bit window, overlap-
+  capable). Byte-exact on all 4 `.nut`; encoder self-verifies + is tighter than SYGNAS (9873 vs 9910 B).
+- **Translated `calmain.nut`** (the BPM/fps/paper converter): help text, note-length/paper labels,
+  validation → pure ASCII (DrawTextA-safe). `calculator/calimas/callucky.nut` = comments-only, untouched.
+- **Translated the baked button PNGs** (`tools/calc_png.py`): 電卓/単位換算 tabs, 変換/コピー, 税+/税-,
+  ページ数 — erase JP by per-row gradient reconstruction, redraw EN in MS PGothic (supersampled), all size 12.
+  Owner-reviewed/tuned over **llm-feed** (`/opt/src/llm-feed`, `localhost:8777` — push screenshots there).
+- **Pipeline**: new build_patch **`pak` op** (`subs` re-compress `.nut` + `gen="calc_png"` retext PNGs from
+  the user's OWN images at build time — no committed SYGNAS bytes). `--selftest-pak` 4/0. Verified the
+  rebuilt `data.pak` changes exactly `calmain.nut` + 14 button PNGs; 100 others byte-identical.
+- **Installer**: faithful parenthesized button accelerators (Back **(B)** / Next (N) / Install (I) /
+  Finish **(F)**; Cancel none) matching the JP original's bundled Japanese.isl — the (F) the owner saw is
+  **Finish**, not Next. `installer/luckymas-en.isl`.
+
+**Translation surface is COMPLETE.** Remaining (recorded, non-text): the `CreateFontA` facenames (render
+fine when PGothic present → the installer bundles it), MFC/VERSIONINFO boilerplate, the textless `.mink`
+sprite codec. **Open**: live-on-XP render check of the translated calc (box was in NixOS this session);
+the deferred wallpaper-JPG renames + `.scr` display-name pe_res; the spurious empty left-click menu (pre-existing).

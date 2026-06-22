@@ -495,3 +495,43 @@ cleanly proven on the box.
 - Note: on the test box the right-click "Lucky*Star Calculator" still showed "Lucky Star" because
   `C:\lm\Launch.ini` is the hand-written test INI (kept for its `[Data]`/`[Calendar]` config), not the
   patched one — the shipping `out/patched/Launch.ini` carries the `*`. Correct in the build.
+
+---
+
+## 2026-06-22 — Session 11 (calc): the `data.pak` `.nut` LZSS cracked + themed-calculator TL
+
+The last untranslated user-facing surface. `WinCalcImas/Lucky.exe` `DoFileEx` into `calmain.nut`, a
+member of `app/calc/data.pak` compressed with the calc's own LZSS (Session-1 left it "deferred / a
+different codec"). Cracked it, translated the script strings + the baked button-label PNGs.
+
+### The `.nut` codec (cracked — `mink-format.md` §Compression)
+Not the ACZ/Okumura text codec. Derived by hand from 3 back-reference samples, confirmed byte-exact on
+all 4 `.nut`: control bits read **MSB-first**, bit **set = literal**; a match token is 2 bytes —
+`length=(b0&0x0f)+2` (2..17), `distance=((b0>>4)|(b1<<4))+1` (12-bit window, **overlap-capable**). The
+distance's low 4 bits live in `b0`'s HIGH nibble + high 8 in `b1` — a non-contiguous split, which is why
+a single-split brute force (LE/BE × one cut point) found nothing; the hand-derivation `(b0>>4)+1 == dist`
+on `0xa0/0x60/0x10 → 11/7/2` was the key. Encoder (`pak_compress`) is greedy 3-byte-index longest-match,
+self-verifies decode==input before returning, and is even slightly tighter than SYGNAS (9873 vs 9910 B).
+
+### What's where
+- `calmain.nut` = the **converter tool** (BPM↔ms, ms↔fps frames, page-count→paper-thickness): `TextBoxStr[0..4]`
+  help, note-length result labels (全音符/二分音符/…), paper types (上質紙/アート紙/マット紙), the validation
+  msg. **All displayed strings translated to pure ASCII** (DrawTextA → mojibakes on non-JP locale; … -> ...,
+  （ms）-> (ms)) and kept within the 176px scrolling textbox. `calculator/calimas/callucky.nut` = comments-only
+  (税込/税抜 are PNG buttons, not script) → untouched.
+- **Baked button PNGs** (labels rasterised, not runtime-drawn): the 電卓/単位換算 mode tabs, 変換/コピー,
+  税+/税-, the ページ数 paper rows. `tools/calc_png.py` erases each glyph run by reconstructing the button
+  gradient per-row (median of non-text pixels) and redraws EN in **MS PGothic** (the builder font →
+  matches the app). Profiled column-ink to box only ページ数 and keep " -> mm". Owner-tuned via llm-feed:
+  all button text size 12; tabs Calc/Convert, 変換->Convert, コピー->Copy, 税+/税- ->Tax+/Tax-, ページ数->pages.
+
+### Tooling + pipeline
+- `sygnas_unpack.pak_decompress` + `parse_packdata` now decode `.nut` (was emitted `.raw`).
+- `sygnas_repack.pak_compress` + `repack_packdata` + `--selftest-pak` (4 ok, 0 fail).
+- `build_patch` new **`pak` op**: per-member `subs` (decode .nut → cp932 find/replace → re-compress;
+  asserts every string literal is ASCII after) or `src`; plus `gen="calc_png"` (retext the button PNGs
+  from the user's OWN images at build time — never a committed SYGNAS PNG; pillow lazy-imported).
+- Verified: the rebuilt `data.pak` changes exactly `calmain.nut` + the 14 button PNGs; the other 100
+  members are byte-identical. **Translation surface is now complete** (only the deferred facenames —
+  fine when PGothic present, which the installer bundles — + MFC/VERSIONINFO boilerplate + the textless
+  `.mink` sprite codec remain). Live-on-XP render check still pending (box was in NixOS this session).

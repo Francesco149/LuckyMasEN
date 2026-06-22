@@ -9,6 +9,19 @@ project scope, owner constraints, research findings, and approach analysis live 
 **`retro-hardware/projects/minkit-en-patch/README.md`** — read that first. This repo is where the
 actual RE notes, format specs, tooling, and the redistributable patch are built.
 
+## Demo — the mascots run their own calendar, no Google account
+
+| `SerifCallenderSchedule` — today's events | `SerifCallenderNone` — empty calendar |
+|:---:|:---:|
+| ![today's schedule bubble](docs/screenshots/gcal-schedule-bubble.png) | ![no plans bubble](docs/screenshots/gcal-none-bubble.png) |
+
+Hiyori on real **Windows XP SP3**, reading her calendar from our **native XP-local fake-Google server**
+([`tools/gcal-xp/`](tools/gcal-xp/README.md)) — a single ~300 KB Win32 EXE that answers as
+`www.google.com` over the box's own 2007 **WinINet↔Schannel** TLS stack (Schannel ClientLogin + GData
+feeds + POP3; request logic in embedded Lua). The events (*Dentist / Lunch with Konata / Buy doujinshi*)
+are served entirely **locally** and the speech bubbles are in our English translation — no Google
+account, no internet.
+
 ## Hard rule: no redistribution of original files
 
 We ship **only a delta + a tool** that applies to the user's *own* copy of the disc. No SYGNAS

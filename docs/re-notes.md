@@ -249,6 +249,24 @@ the nix-pinned source → `liblua.a`; the EXE still imports only XP DLLs, now ~3
 edit. **Re-validated on XP via SMB-exec:** WinINet TLS ClientLogin (`STATUS=200`, `Auth=`), the HTTP Atom feeds,
 and POP3 (incl. multi-line LIST) — all **byte-identical** to the C version.
 
-**Remaining:** the final end-to-end — drive the actual **`gcal.exe` + launcher** → fire the `SerifCallender*`/
-`SerifMail*` bubbles (server side is done; validates launcher rendering — needs GUI driving in the interactive
-session). Plus: a silent (no-modal) cert install + first-run installer.
+**✅ End-to-end captured on real XP (same session).** Drove the actual launcher against our Lua server and
+screenshotted the mascot bubbles (→ `docs/screenshots/`, README gallery). `gcalcore` did the full check —
+`ClientLogin` over Schannel TLS → `Auth=` → allcalendars → the event feed, and the binary's **real** query is
+`…/private/full?start-min=<today>T00:00:00+09:00&start-max=<tomorrow>T00:00:00+09:00` — and the EN-translated
+**`SerifCallenderSchedule`** bubble rendered with our events (Dentist / Lunch with Konata / Buy doujinshi);
+**`SerifCallenderNone`** ("No plans!…") rendered too.
+- **Bubble triggers:** the boot check (`[Calendar] Boot=1`) auto-pops a bubble only when there ARE events
+  (Schedule). An empty calendar is **silent on boot**; `SerifCallenderNone` fires on the **manual right-click
+  → Calendar check (&C)** (owner confirmed live).
+- **Screenshot gotcha:** the mascot is a per-pixel-alpha **layered window** — `nircmd savescreenshotfull`
+  (GDI BitBlt) captures it as **bare desktop**. Use **PrtScn → clipboard → save** (`nircmd sendkeypress 0x2c`
+  then `nircmd clipboard saveimage`) to grab the composited framebuffer.
+- **JP-path + agent gotchas:** the JP install path breaks cmd `start`/`cd` → copy the launcher to an ASCII
+  path (`C:\lm`, `Launch.ini` `Folder=C:\lm`). The single-threaded xphttpd agent wedges if a launched GUI holds
+  its stdout pipe; **`nircmd exec show <fullpath>`** detaches cleanly (no wedge), `start`/`start …>nul` did not.
+  And `nircmd savescreenshotfull` fails if a *preceding* chained command used `>nul` (the nul handle leaks as
+  its stdout) — delay with `ping` **without** `>nul`. Driver: `tools/gcal-xp/test/lm.cmd`.
+
+**Remaining:** silent (no-modal) cert install + first-run installer; patch `gcalcore.dll`'s host string
+(wide `www.google.com`) → `localhost` so the redirect doesn't blackhole real Google; finish the EN text +
+PE-resource strings; the POP3 mail bubble (Launch.ini `[Mail]` needs a configured POP3 client/host).

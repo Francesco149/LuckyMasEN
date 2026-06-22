@@ -462,3 +462,20 @@ Detail → [`re-notes.md`](re-notes.md) §"Session 11"; format → [`mink-format
 fine when PGothic present → the installer bundles it), MFC/VERSIONINFO boilerplate, the textless `.mink`
 sprite codec. **Open**: live-on-XP render check of the translated calc (box was in NixOS this session);
 the deferred wallpaper-JPG renames + `.scr` display-name pe_res; the spurious empty left-click menu (pre-existing).
+
+### Session 11 (cont.) — the remainder: wallpaper + screensavers + header art (translation COMPLETE)
+Owner-directed "finish the remainder, then test." All the deferred non-binary surface is now done:
+- **Screensavers**: 4 `sys/らき☆マス：*.scr` -> ASCII (`LuckyMas - iM@S 3D.scr`, …). The Display-Properties
+  picker name = the filename (the .scr's type-6 strings are the lang-1033 framework UI; only a lang-1041
+  VERSIONINFO is JP = the deferred boilerplate), so the rename IS the name translation.
+- **Wallpaper**: 84 `らき☆マス_<artist>_WxH.jpg` -> `LuckyMas_<romaji>_…` + the HTML `<a>/<img>` refs in
+  lockstep (locale goal #2). New `rename_map` op (one 14-artist map drives renames + ref rewrite; romaji =
+  the ASCII `thumb_<key>` names, paired by HTML grouping, verified 1:1). Installer `[INI]` already pins
+  `Exec004 -> wallpaper.html`.
+- **Header art**: the baked 壁紙の設定方法 / 壁紙一覧 / あなたのモニターサイズ images retexted. New `img_text`
+  op + `calc_png.WP_HEADERS`: magenta-fill / white-border / pink-glow title (colours sampled from the JP
+  original, owner-tuned bolder) on the green diamond texture — the JP run **tile-erased** (diamond period
+  31, phase-aligned) so the pattern continues, EN drawn left-aligned. All owner-reviewed over llm-feed.
+
+**Only deferred item left: the Launch.ini install-root path rewrite (the installer pins `{app}` via `[INI]`).**
+Next: rebuild the EN `setup.exe` with all of this, then live-test on real XP.

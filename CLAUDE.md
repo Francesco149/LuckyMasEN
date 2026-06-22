@@ -97,23 +97,26 @@ so the mascots' calendar/mail work with no Google account:
 Every file we patch goes through ONE pipeline → spec in `docs/patch-system.md`. `manifest.toml` is the
 single source of truth (one entry per file + op + note; `active=false` = recorded-but-deferred);
 `build_patch.py` mirrors `originals/installed/`→`out/patched/` (gitignored), applies ops, writes
-`PATCH-LOG.txt`. Ops: `xvi`/`text_keys`/`text_subst`/`text_file`/`binpatch`/`pe_res`/`pak`/`rename`. Reproducible.
+`PATCH-LOG.txt`. Ops: `xvi`/`text_keys`/`text_subst`/`text_file`/`binpatch`/`pe_res`/`pak`/`img_text`/`rename`/`rename_map`. Reproducible.
 `pe_res` (`tools/pe_res.py`) **surgically** patches PE-resource menus/dialogs (lang 1041) + does geometry
 overrides — **never `lief.write()`** (it rebuilds the PE and crashes XP). `binpatch` does size-preserving
 NUL-terminated string replace: `wide=true` (UTF-16) | `encoding="cp932"` (SJIS, for JP drawn via `*A` APIs)
 | latin1. Find hardcoded JP with **`tools/scan_jp.py`** (`strings` can't see cp932). The `pak` op rebuilds the calc
 `data.pak`: per-member `.nut` string `subs` (decode via the cracked LZSS — `sygnas_unpack.pak_decompress`/
 `sygnas_repack.pak_compress` — find/replace, re-compress) + `gen="calc_png"` (retext the baked button-label
-PNGs from the user's own images via `tools/calc_png.py`, MS PGothic). **All PE-resource UI + all hardcoded/
-runtime JP + the themed calculators are now EN** (menus, tooltips, dialogs, status/error MsgBoxes; `.Xvi`
-serifs pure ASCII; `calmain.nut` converter strings + the calc button PNGs). Held back (recorded): the
-`CreateFontA` facenames (`ＭＳ Ｐゴシック`; lives fine when PGothic present — the installer now bundles it) +
-MFC/VERSIONINFO boilerplate.
+PNGs from the user's own images via `tools/calc_png.py`, MS PGothic). `img_text` retexts loose baked-text
+images (the wallpaper section headers, same `calc_png` engine); `rename_map` bulk-renames files by a
+substring map + rewrites refs in lockstep. **The translation surface is COMPLETE** — all PE-resource UI,
+all hardcoded/runtime JP, the themed calculators (`calmain.nut` + button PNGs), the wallpaper picker (84
+JPGs + HTML refs ASCII'd; 壁紙の設定方法/壁紙一覧/モニターサイズ header images retexted), and the 4 screensaver
+filenames (= their Display-Properties names) are EN. Held back (recorded, non-text): the `CreateFontA`
+facenames (`ＭＳ Ｐゴシック`; fine when PGothic present — the installer bundles it), MFC/VERSIONINFO
+boilerplate, and the textless `.mink` sprite codec.
 End goal = **English installer re-wrapped from the user's own `setup.exe`** (ISCC under wine; consumes
 `out/patched/`). **Locale rule** (goal #2): app-read text (Launch.ini, `.Xvi` serifs via `*A` APIs) =
 **pure ASCII**; readme = UTF-8+BOM; HTML = UTF-8. **host→localhost** done in `gcalcore.dll`+`gcal.exe`
-(binpatch) + cert CN=localhost — drop the XP `hosts` line; the deferred `.mink`/`.scr`/path renames
-activate with the installer stage.
+(binpatch) + cert CN=localhost — drop the XP `hosts` line. The `.mink`/`.scr`/wallpaper-JPG renames are
+now ACTIVE; only the Launch.ini install-root path rewrite stays deferred (the installer pins `{app}` via `[INI]`).
 
 ## Conventions
 - Persist cross-session **orientation in this CLAUDE.md**; the running RE/build narrative in

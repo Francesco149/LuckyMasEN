@@ -136,6 +136,11 @@ Filename: "{app}\launcher\Launch.ini"; Section: "Launch"; Key: "Exec004"; String
 Filename: "{app}\launcher\Launch.ini"; Section: "Launch"; Key: "Exec009"; String: "{sys}\desk.cpl"
 ; MinkIt's animation folder (no MinkIt.ini ships originally -> the EN install writes it; *.mink live here).
 Filename: "{app}\copy\MinkIt.ini"; Section: "Path"; Key: "Folder"; String: "{app}\copy"
+; Pre-seed gcal's account so the calendar connects out of the box. gcal.exe reads [SESSION] EMAIL from
+; gcal.ini (RE'd: GetPrivateProfileStringW "SESSION"/"EMAIL"); the password is in a binary gcal.dat, but
+; the local server ignores credentials (ClientLogin returns Auth= for anything). If gcal still prompts on
+; first run, any login works -- it then saves the account itself.
+Filename: "{app}\launcher\gcal.ini"; Section: "SESSION"; Key: "EMAIL"; String: "you@lucky.example"
 
 [Run]
 ; (1) Trust the server's www.google.com/localhost cert, as admin, into LocalMachine\Root — silent,

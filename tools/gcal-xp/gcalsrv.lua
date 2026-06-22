@@ -25,24 +25,27 @@
 -- Your appointments, keyed by date "YYYY-MM-DD". Each day is a LIST of events;
 -- an event is either a plain title string, or a table to add a time / place:
 --     { title = "Dentist", at = "10:00", where = "Akihabara" }
--- A date that's absent (or an empty list {}) -> SerifCallenderNone for that day.
+-- The special key ["*"] is a WILDCARD shown on any day that has no entry of its own
+-- (so there are demo events out of the box) — replace it with your own, or delete it
+-- for "no plans unless I add the date". A specific date OVERRIDES the wildcard; a date
+-- set to an empty list {} forces SerifCallenderNone for that day.
 local EVENTS = {
-  ["2026-06-23"] = {
+  ["*"] = {                                           -- shown every day until you customise it
     { title = "Dentist",           at = "10:00", where = "Akihabara Clinic" },
     { title = "Lunch with Konata", at = "12:30" },
     "Buy doujinshi",                                  -- title only -> a default time slot
   },
-  ["2026-12-30"] = {
+  ["2026-12-30"] = {                                  -- a specific day overrides the wildcard
     { title = "Comiket 109 -- Day 1", at = "08:00", where = "Tokyo Big Sight" },
   },
 }
 
--- Your inbox, keyed by date "YYYY-MM-DD". Each day is a LIST of messages; a
--- message is { from = , subject = , body = } (or just a subject string). The
--- mascot only COUNTS them (Check vs None), but a real POP3 client on :110 can
--- log in and RETR/read them — so this is a working fake mailbox, not just a count.
+-- Your inbox, keyed by date "YYYY-MM-DD" (["*"] = wildcard, same as above). Each day is
+-- a LIST of messages; a message is { from = , subject = , body = } (or just a subject
+-- string). The mascot only COUNTS them (Check vs None), but a real POP3 client on :110
+-- can log in and RETR/read them — so this is a working fake mailbox, not just a count.
 local MAIL = {
-  ["2026-06-23"] = {
+  ["*"] = {                                           -- demo inbox out of the box
     { from = "konata@lucky.example", subject = "new figs just dropped!!",
       body = "did you see the new nendoroid? we have to go saturday!!" },
     { from = "kagami@lucky.example", subject = "did you finish the homework",
@@ -128,7 +131,7 @@ local function events_for(ini, y, m, d)
     end
     return t
   end
-  return EVENTS[("%04d-%02d-%02d"):format(y, m, d)] or {}
+  return EVENTS[("%04d-%02d-%02d"):format(y, m, d)] or EVENTS["*"] or {}
 end
 
 -- the day the launcher asks about: GData start-min if present, else "today"
@@ -204,7 +207,7 @@ local function inbox(ini)
     for i = 1, (n < 0 and 0 or n) do t[i] = { from = "sender@example", subject = "Message " .. i } end
     return t
   end
-  return MAIL[today_str(ini)] or {}
+  return MAIL[today_str(ini)] or MAIL["*"] or {}
 end
 
 local function msg_text(msg, i)

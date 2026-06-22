@@ -350,7 +350,19 @@ renders on any locale, no ASCII constraint (unlike the ANSI-drawn `.Xvi` serifs 
   as) — 31 strings. **Layout note:** the JP controls are sized tight; EN labels clip/wrap, so SETUPDLG labels
   are kept **concise to fit the original widths** (Folder / Char / Interval / Client / Host→POP3 / Acct / Pass
   …). A full relayout = editing DLGITEMTEMPLATE geometry (by index); deferred unless wanted.
-- **Still JP (next):** the pin/hold-arrow **tooltip** (not a resource → a hardcoded string; RE + binpatch),
-  and the other binaries' resources — `MinkIt.exe` (ABOUTDLG/PREVIEWDLG/SETUPDLG), `WinCalc.exe` (menu +
-  dialogs + **RT_STRING** table 3601–3838 → needs a string-table builder), the 4 `.scr` (config + the Screen
-  Saver display name). Deploy/drive recipe in `tools/deploy-xp.sh`.
+- **`MinkIt.exe` + `WinCalc.exe` DONE** (same surgical op): MinkIt config dialogs (About/Preview/Setup, 11
+  strings); WinCalc menu + dialogs (10 strings). Sizes unchanged, PEs valid. `has_jp()` now matches actual
+  kana/CJK (not any non-ASCII) so EN strings with ☆/× aren't false-flagged.
+- **Scoping found while surveying the rest:**
+  - `WinCalc.exe` is **not launched** by the launcher — `Launch.ini` runs the themed **`WinCalcImas.exe` /
+    `WinCalcLucky.exe`**, which have **no menu/dialog resources** (icons/manifest only); their UI text lives
+    in their `.nut` scripts (`data.pak`, behind the un-cracked codec → deferred). So the calc's on-screen
+    text is **not** PE-resource-translatable today.
+  - `WinCalc.exe`'s **RT_STRING** table is standard **MFC framework** boilerplate (document/print/window
+    prompts) — never shown → **skipped** (no string-table builder needed yet).
+  - The 4 **`.scr`** have **no translatable PE strings** (their config dialogs are lang-1033 MFC stubs with
+    no text); the dropdown name = the **filename** → handled by the deferred `.scr` **rename**, not resources.
+- **⇒ PE-resource translation is COMPLETE** for everything that's resource-translatable + user-visible.
+  **Remaining JP is binary/hardcoded strings** — next session (post-/clear): the pin/hold-arrow **tooltip**
+  and any other strings drawn via `*A` APIs straight from the binaries (RE + `binpatch`); also the `.Xvi`
+  serif **☆→ASCII** locale pass. Deploy/drive recipe: `tools/deploy-xp.sh`.

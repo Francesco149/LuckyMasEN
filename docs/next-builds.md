@@ -193,8 +193,8 @@ cert, and gets `Auth=` from ClientLogin (`STATUS=200`); HTTP feeds + POP3 also v
 the five bugs fixed (legacy-PKCS12, mcfgthread/XP-safety, protected-root modal, handshake-crash, SYSTEM
 keyset), and the SMB-exec-not-the-agent operating rule → [`re-notes.md`](re-notes.md) §"Session 4".
 
-**Remaining:** (A) **migrate the request logic to embedded Lua** (owner-directed; C keeps sockets+Schannel+
-POP3, Lua gets routing/Atom/config — the `http_handle()` seam is already isolated). (B) the final end-to-end:
-drive the real `gcal.exe`/launcher → fire the `SerifCallender*`/`SerifMail*` bubbles (server side done; this
-is launcher-render validation, needs GUI driving). (C) unattended cert install (certutil/registry, no modal)
-+ first-run installer (hosts + Startup).
+**Remaining:** (A) ✅ **embedded-Lua migration DONE + validated** (same session) — Lua 5.4 statically linked,
+all request logic in `gcalsrv.lua` (C keeps sockets+Schannel+POP3+framing); re-tested on XP, byte-identical to
+the C version. Next under this: a real local-calendar backend (script edit). (B) the final end-to-end: drive
+the real `gcal.exe`/launcher → fire the `SerifCallender*`/`SerifMail*` bubbles (server side done; launcher-render
+validation, needs GUI driving). (C) unattended cert install (certutil/registry, no modal) + first-run installer.

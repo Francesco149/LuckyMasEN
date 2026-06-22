@@ -14,6 +14,13 @@ Why native (vs. the old `code`-hosted Python): on XP the server speaks **Schanne
 **WinINet** — the *same* 2007 stack, so the TLS handshake is **period-accurate by construction** (no modern-TLS
 coercion, no separate always-on box). The Python `../gcal-emu/gcal_emu.py` is kept as the protocol **oracle**.
 
+**Architecture:** C owns the transport — Winsock sockets, the Schannel TLS handshake/encrypt/decrypt, POP3
+line framing, the cert, and the HTTP/1.0 status-line/headers. The **request logic lives in Lua**
+(`gcalsrv.lua`): routing, the Atom feed builders, the ClientLogin/POP3 responses, and the `gcal-xp.ini`
+scenario. Lua 5.4 is statically embedded; the script is carried inside the EXE but an external
+`<exedir>\gcalsrv.lua` overrides it — so a real local-calendar backend is a script edit, no rebuild. The C↔Lua
+boundary is two calls: `http_handle(method,path,query,body)→status,ctype,body` and `pop3_event(verb,arg)→reply,action`.
+
 **Status:** ✅ built + **validated on real XP SP3** (2026-06-22). A real WinINet client completes the
 Schannel handshake, trusts the embedded cert, and gets `Auth=` from ClientLogin; HTTP feeds + POP3 verified.
 See `../../docs/re-notes.md` §"Session 4".
@@ -24,9 +31,12 @@ See `../../docs/re-notes.md` §"Session 4".
 ./build.sh          # i686-w64-mingw32 via nix → gcalsrv.exe (XP subsystem 5.1, static)
 ```
 
-It cross-compiles with mingw-w64 (fetched via nix), statically links the mcf threads runtime (dead-stripped —
-we use native `CreateThread`) so the EXE imports **only XP system DLLs**, and targets subsystem 5.1 + fixed
-base (`-no-pie`). `embed-pfx.sh` regenerates `cert_pfx.h` (the embedded cert) from `../gcal-emu/certs/`.
+It cross-compiles with mingw-w64 (fetched via nix), builds `liblua.a` from the nix-pinned Lua 5.4 source
+(cached in `.luabuild/`), statically links it + the mcf threads runtime (dead-stripped — we use native
+`CreateThread`) so the EXE imports **only XP system DLLs**, and targets subsystem 5.1 + fixed base (`-no-pie`).
+`embed-pfx.sh` regenerates `cert_pfx.h` (the embedded cert); `embed-lua.sh` regenerates `gcalsrv_lua.h` (the
+embedded default script) from `gcalsrv.lua`. Edit `gcalsrv.lua` and rebuild (or just redeploy it as an external
+override) to change the logic.
 
 ## The cert
 
@@ -89,7 +99,7 @@ cert-trust path — the proof used in Session 4.
 
 ## Roadmap
 
-- **Embed Lua** for the request logic (C keeps sockets + Schannel + POP3 framing; Lua gets routing/Atom/config)
-  — owner-directed, makes a customizable real-calendar backend easy. The `http_handle()` seam is already isolated.
-- First-run installer: silent cert install + `hosts` redirect + Startup autostart (one click).
+- ✅ **Lua request logic** (`gcalsrv.lua`) — done + validated on real XP; responses byte-identical to the
+  C version. Next: a real local-calendar backend (read events from a local file/ICS) — now a script edit.
+- First-run installer: silent cert install (certutil/registry, no modal) + `hosts` redirect + Startup autostart.
 - End-to-end: drive the real `gcal.exe`/launcher → capture the `SerifCallender*`/`SerifMail*` bubbles.

@@ -39,3 +39,7 @@ __pycache__/
 *.swp
 *~
 .DS_Store
+
+# Lua build cache (liblua.a compiled from the nix-pinned lua source)
+/tools/gcal-xp/.luabuild/
+/tools/gcal-xp/gcalsrv_lua.h

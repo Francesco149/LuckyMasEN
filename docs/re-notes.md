@@ -240,7 +240,15 @@ child (e.g. the server) inherits its stdout pipe and **wedges** it. ⇒ drive ev
 as SYSTEM in session 0 (ports are global; loopback crosses sessions; trust via LocalMachine\Root). TODO:
 fix the agent's single-threadedness, or see if `smbexec -i 1` can run on the interactive desktop.
 
-**Next:** (1) **migrate the request logic to embedded Lua** (owner-directed) — keep C for sockets + Schannel
-+ POP3 framing; move routing/Atom/config to Lua (the `http_handle()` seam is already isolated). (2) The one
-remaining end-to-end: drive the actual **`gcal.exe` + launcher** → fire the `SerifCallender*` bubbles (the
-server side is done; this validates the launcher rendering — needs GUI driving in the interactive session).
+**✅ Lua migration done + validated (same session).** Embedded **Lua 5.4** (statically linked, compiled from
+the nix-pinned source → `liblua.a`; the EXE still imports only XP DLLs, now ~300 KB). C keeps the transport
+(sockets, Schannel, POP3 framing, HTTP status/headers, cert); **all request logic moved to `gcalsrv.lua`**
+(routing, Atom builders, ClientLogin/POP3 responses, `gcal-xp.ini`). C↔Lua boundary = `http_handle()` +
+`pop3_event()`; one shared `lua_State` under a lock (low volume). The script is embedded (`gcalsrv_lua.h` via
+`embed-lua.sh`) with an external `<exedir>\gcalsrv.lua` override → a real local-calendar backend is now a script
+edit. **Re-validated on XP via SMB-exec:** WinINet TLS ClientLogin (`STATUS=200`, `Auth=`), the HTTP Atom feeds,
+and POP3 (incl. multi-line LIST) — all **byte-identical** to the C version.
+
+**Remaining:** the final end-to-end — drive the actual **`gcal.exe` + launcher** → fire the `SerifCallender*`/
+`SerifMail*` bubbles (server side is done; validates launcher rendering — needs GUI driving in the interactive
+session). Plus: a silent (no-modal) cert install + first-run installer.

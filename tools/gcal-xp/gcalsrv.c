@@ -42,8 +42,14 @@
 #include <stdarg.h>
 #include <ctype.h>
 
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+
 /* embedded www.google.com PKCS#12 (CERT_PFX / CERT_PFX_LEN / CERT_PFX_PASS) */
 #include "cert_pfx.h"
+/* embedded default request-logic script (GCALSRV_LUA / GCALSRV_LUA_LEN) */
+#include "gcalsrv_lua.h"
 
 #define DEF_HTTP_PORT  80
 #define DEF_HTTPS_PORT 443
@@ -64,6 +70,9 @@ static CRITICAL_SECTION g_loglock;
 
 static CredHandle    g_hCred;           /* Schannel server credential (shared, read-only) */
 static PCCERT_CONTEXT g_pCert = NULL;   /* our www.google.com cert (with private key) */
+
+static lua_State    *g_L = NULL;        /* request logic (gcalsrv.lua) */
+static CRITICAL_SECTION g_lua_lock;     /* one shared lua_State, serialised (low volume) */
 
 /* ---- logging ----------------------------------------------------------------- */
 static void logln(const char *fmt, ...) {
@@ -105,233 +114,128 @@ static void sb_addf(struct sb *b, const char *fmt, ...) {
     sb_add(b, tmp, n);
 }
 
-/* ---- config (scenario), re-read per request ---------------------------------- */
-struct cfg {
-    char calendar[16];   /* schedule | none | error */
-    char mail[16];       /* check | none | error | refuse */
-    char account[128];
-    char calname[128];
-    char tzoffset[16];
-    char events[1024];   /* ';'-separated titles */
-    int  mailcount;
-};
-static void cfg_defaults(struct cfg *c) {
-    strcpy(c->calendar, "schedule");
-    strcpy(c->mail, "check");
-    strcpy(c->account, "test@example.com");
-    strcpy(c->calname, "Test Calendar");
-    strcpy(c->tzoffset, "+09:00");
-    strcpy(c->events, "Dentist;Lunch with Konata;Buy doujinshi");
-    c->mailcount = 3;
-}
-static void cfg_set(struct cfg *c, const char *k, const char *v) {
-    if      (!_stricmp(k, "calendar"))  { strncpy(c->calendar, v, sizeof(c->calendar) - 1); }
-    else if (!_stricmp(k, "mail"))      { strncpy(c->mail, v, sizeof(c->mail) - 1); }
-    else if (!_stricmp(k, "account"))   { strncpy(c->account, v, sizeof(c->account) - 1); }
-    else if (!_stricmp(k, "calname"))   { strncpy(c->calname, v, sizeof(c->calname) - 1); }
-    else if (!_stricmp(k, "tzoffset"))  { strncpy(c->tzoffset, v, sizeof(c->tzoffset) - 1); }
-    else if (!_stricmp(k, "events"))    { strncpy(c->events, v, sizeof(c->events) - 1); }
-    else if (!_stricmp(k, "mailcount")) { c->mailcount = atoi(v); }
-}
-static void cfg_load(struct cfg *c) {
-    cfg_defaults(c);
-    FILE *f = fopen(g_inipath, "r");
-    if (!f) return;
-    char ln[1200];
-    while (fgets(ln, sizeof(ln), f)) {
-        char *p = ln; while (*p == ' ' || *p == '\t') p++;
-        if (*p == '#' || *p == ';' || *p == '\r' || *p == '\n' || *p == 0) continue;
-        char *eq = strchr(p, '=');
-        if (!eq) continue;
-        *eq = 0;
-        char *k = p, *v = eq + 1;
-        /* trim key trailing ws */
-        char *ke = k + strlen(k); while (ke > k && (ke[-1] == ' ' || ke[-1] == '\t')) *--ke = 0;
-        /* trim value ws + EOL */
-        while (*v == ' ' || *v == '\t') v++;
-        char *ve = v + strlen(v); while (ve > v && (ve[-1] == '\r' || ve[-1] == '\n' || ve[-1] == ' ' || ve[-1] == '\t')) *--ve = 0;
-        cfg_set(c, k, v);
-    }
-    fclose(f);
-}
-
-/* ---- helpers ----------------------------------------------------------------- */
-/* XML-escape src into dst (bounded); returns dst */
-static char *xesc(const char *src, char *dst, int cap) {
-    int o = 0;
-    for (; *src && o < cap - 7; src++) {
-        switch (*src) {
-            case '&': memcpy(dst + o, "&amp;", 5);  o += 5; break;
-            case '<': memcpy(dst + o, "&lt;", 4);   o += 4; break;
-            case '>': memcpy(dst + o, "&gt;", 4);   o += 4; break;
-            case '"': memcpy(dst + o, "&quot;", 6); o += 6; break;
-            default:  dst[o++] = *src;
-        }
-    }
-    dst[o] = 0;
-    return dst;
-}
-
-/* The day the launcher asks about: GData start-min if present, else local today. */
-static void anchor_date(const char *query, int *y, int *m, int *d) {
-    SYSTEMTIME st; GetLocalTime(&st);
-    *y = st.wYear; *m = st.wMonth; *d = st.wDay;
-    if (!query) return;
-    const char *p = strstr(query, "start-min=");
-    if (!p) return;
-    p += 10;
-    int yy, mm, dd;
-    if (sscanf(p, "%4d-%2d-%2d", &yy, &mm, &dd) == 3 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
-        *y = yy; *m = mm; *d = dd;
+/* ---- Lua bridge: the request logic lives in gcalsrv.lua ----------------------- */
+static const char *http_reason(int code) {
+    switch (code) {
+        case 200: return "OK";
+        case 400: return "Bad Request";
+        case 403: return "Forbidden";
+        case 404: return "Not Found";
+        case 500: return "Internal Server Error";
+        default:  return "OK";
     }
 }
 
-/* split ';'-separated, space-trimmed, non-empty titles into out[]; returns count */
-static int split_events(const char *events, char out[][256], int maxn) {
-    int n = 0; const char *p = events;
-    while (*p && n < maxn) {
-        while (*p == ' ') p++;
-        const char *start = p;
-        while (*p && *p != ';') p++;
-        const char *end = p;
-        while (end > start && end[-1] == ' ') end--;
-        int len = (int)(end - start); if (len > 255) len = 255;
-        if (len > 0) { memcpy(out[n], start, len); out[n][len] = 0; n++; }
-        if (*p == ';') p++;
-    }
-    return n;
-}
+/* C functions exposed to the script */
+static int l_log(lua_State *L)    { logln("lua: %s", luaL_optstring(L, 1, "")); return 0; }
+static int l_exedir(lua_State *L) { lua_pushstring(L, g_exedir); return 1; }
 
-#define ATOM_NS \
-    "xmlns='http://www.w3.org/2005/Atom' " \
-    "xmlns:gd='http://schemas.google.com/g/2005' " \
-    "xmlns:gCal='http://schemas.google.com/gCal/2005'"
+/* Create the Lua state, register the C API, load the script (external <exedir>\gcalsrv.lua
+ * if present, else the embedded default), run it, and verify the handlers are defined. */
+static int lua_init(void) {
+    g_L = luaL_newstate();
+    if (!g_L) { logln("LUA: newstate failed"); return 0; }
+    luaL_openlibs(g_L);
+    lua_register(g_L, "gcalsrv_log", l_log);
+    lua_register(g_L, "gcalsrv_exedir", l_exedir);
+    InitializeCriticalSection(&g_lua_lock);
 
-/* Atom calendar LIST: one <entry> whose <link href=> is the event-feed URL. */
-static void build_allcalendars(struct sb *b, const struct cfg *c) {
-    char cal[256], href[512], hrefe[600];
-    xesc(c->calname, cal, sizeof(cal));
-    _snprintf(href, sizeof(href),
-              "http://www.google.com/calendar/feeds/%s/private/full", c->account);
-    xesc(href, hrefe, sizeof(hrefe));
-    sb_adds(b, "<?xml version='1.0' encoding='UTF-8'?>\n");
-    sb_addf(b, "<feed %s>\n", ATOM_NS);
-    sb_adds(b, "  <title type='text'>Calendar List</title>\n");
-    sb_adds(b, "  <entry>\n");
-    sb_addf(b, "    <title type='text'>%s</title>\n", cal);
-    sb_addf(b, "    <link rel='alternate' type='application/atom+xml' href='%s'/>\n", hrefe);
-    sb_adds(b, "    <gCal:color value='#2952A3'/>\n");
-    sb_adds(b, "    <gCal:accesslevel value='owner'/>\n");
-    sb_adds(b, "    <gCal:selected value='true'/>\n");
-    sb_adds(b, "  </entry>\n</feed>\n");
-}
-
-/* Atom EVENT feed. >=1 entry => SerifCallenderSchedule, anchored to "today". */
-static void build_events(struct sb *b, const struct cfg *c, const char *query) {
-    static const int slots[4][4] = { {9,0,10,0}, {12,30,13,30}, {15,0,16,0}, {18,0,19,0} };
-    int y, m, d; anchor_date(query, &y, &m, &d);
-    char cal[256]; xesc(c->calname, cal, sizeof(cal));
-    sb_adds(b, "<?xml version='1.0' encoding='UTF-8'?>\n");
-    sb_addf(b, "<feed %s>\n", ATOM_NS);
-    sb_addf(b, "  <title type='text'>%s</title>\n", cal);
-
-    char titles[64][256];
-    int nt = split_events(c->events, titles, 64);
-    for (int i = 0; i < nt; i++) {
-        const int *s = slots[i % 4];
-        char te[512]; xesc(titles[i], te, sizeof(te));
-        sb_adds(b, "  <entry>\n");
-        sb_addf(b, "    <title type='text'>%s</title>\n", te);
-        sb_addf(b, "    <content type='text'>%s</content>\n", te);
-        sb_addf(b, "    <gd:when startTime='%04d-%02d-%02dT%02d:%02d:00.000%s' "
-                   "endTime='%04d-%02d-%02dT%02d:%02d:00.000%s'/>\n",
-                y, m, d, s[0], s[1], c->tzoffset, y, m, d, s[2], s[3], c->tzoffset);
-        sb_adds(b, "    <gd:where valueString='Akihabara'/>\n");
-        sb_adds(b, "    <gd:eventStatus value='http://schemas.google.com/g/2005#event.confirmed'/>\n");
-        sb_adds(b, "  </entry>\n");
-    }
-    sb_adds(b, "</feed>\n");
-}
-
-static int count_events(const struct cfg *c) {
-    char titles[64][256];
-    return split_events(c->events, titles, 64);
-}
-
-/* ---- HTTP response assembly (shared by the :80 and :443 paths) ---------------- */
-static void http_response(struct sb *out, int code, const char *reason,
-                          const char *ctype, const char *body, int blen) {
-    sb_addf(out, "HTTP/1.0 %d %s\r\n", code, reason);
-    sb_addf(out, "Content-Type: %s\r\n", ctype);
-    sb_addf(out, "Content-Length: %d\r\n", blen);
-    sb_adds(out, "Connection: close\r\n\r\n");
-    sb_add(out, body, blen);
-}
-
-/* Build the full response for one request. Returns the HTTP status code (for the log). */
-static int http_handle(const struct cfg *c, const char *method, const char *path,
-                       const char *query, const char *body, int bodylen,
-                       char **resp, int *resplen) {
-    (void)body; (void)bodylen;
-    int code = 404;
-    struct sb out; sb_init(&out);
-
-    /* normalise: strip trailing slashes */
-    char p[1024]; strncpy(p, path, sizeof(p) - 1); p[sizeof(p) - 1] = 0;
-    int pl = (int)strlen(p); while (pl > 1 && p[pl - 1] == '/') p[--pl] = 0;
-
-    if (!_stricmp(method, "POST") && !strcmp(p, "/accounts/ClientLogin")) {
-        if (!strcmp(c->calendar, "error")) {
-            const char *b = "Error=BadAuthentication\n";
-            http_response(&out, 403, "Forbidden", "text/plain; charset=UTF-8", b, (int)strlen(b));
-            code = 403;
-        } else {
-            const char *b = "SID=emu\nLSID=emu\nAuth=EMU_TEST_TOKEN\n";
-            http_response(&out, 200, "OK", "text/plain; charset=UTF-8", b, (int)strlen(b));
-            code = 200;
-        }
-    } else if (!_stricmp(method, "GET") && !strcmp(p, "/calendar/feeds/default/allcalendars/full")) {
-        if (!strcmp(c->calendar, "error")) {
-            const char *b = "Forbidden\n";
-            http_response(&out, 403, "Forbidden", "text/plain", b, (int)strlen(b));
-            code = 403;
-        } else {
-            struct sb body2; sb_init(&body2); build_allcalendars(&body2, c);
-            http_response(&out, 200, "OK", "application/atom+xml; charset=UTF-8", body2.p, body2.len);
-            free(body2.p); code = 200;
-        }
-    } else if (!_stricmp(method, "GET") && !strncmp(p, "/calendar/feeds/", 16)) {
-        /* the event feed (any .../private/full the client built from our <link href=>) */
-        if (!strcmp(c->calendar, "error")) {
-            const char *b = "Forbidden\n";
-            http_response(&out, 403, "Forbidden", "text/plain", b, (int)strlen(b));
-            code = 403;
-        } else {
-            int n = (!strcmp(c->calendar, "none")) ? 0 : count_events(c);
-            struct sb body2; sb_init(&body2);
-            if (n) {
-                build_events(&body2, c, query);
-            } else {
-                char cal[256]; xesc(c->calname, cal, sizeof(cal));
-                sb_adds(&body2, "<?xml version='1.0' encoding='UTF-8'?>\n");
-                sb_addf(&body2, "<feed %s>\n", ATOM_NS);
-                sb_addf(&body2, "  <title type='text'>%s</title>\n</feed>\n", cal);
-            }
-            http_response(&out, 200, "OK", "application/atom+xml; charset=UTF-8", body2.p, body2.len);
-            free(body2.p); code = 200;
-        }
-    } else if (!_stricmp(method, "GET") && !strcmp(p, "/calendar/event")) {
-        const char *b = "<html><body>gcal-xp: add-event template (no-op stub)</body></html>";
-        http_response(&out, 200, "OK", "text/html", b, (int)strlen(b));
-        code = 200;
+    char path[MAX_PATH];
+    _snprintf(path, sizeof(path), "%s\\gcalsrv.lua", g_exedir);
+    if (luaL_loadfile(g_L, path) == LUA_OK) {
+        logln("LUA: loaded external %s", path);
     } else {
-        const char *b = "Not Found\n";
-        http_response(&out, 404, "Not Found", "text/plain", b, (int)strlen(b));
-        code = 404;
+        lua_pop(g_L, 1);   /* drop the loadfile error message */
+        if (luaL_loadbuffer(g_L, (const char *)GCALSRV_LUA, GCALSRV_LUA_LEN, "gcalsrv.lua") != LUA_OK) {
+            logln("LUA: load embedded failed: %s", lua_tostring(g_L, -1));
+            return 0;
+        }
+        logln("LUA: loaded embedded script");
     }
+    if (lua_pcall(g_L, 0, 0, 0) != LUA_OK) {
+        logln("LUA: script init failed: %s", lua_tostring(g_L, -1));
+        return 0;
+    }
+    lua_getglobal(g_L, "http_handle");
+    int ok = lua_isfunction(g_L, -1);
+    lua_pop(g_L, 1);
+    if (!ok) { logln("LUA: http_handle() not defined"); return 0; }
+    logln("LUA: ready");
+    return 1;
+}
 
+/* XML-escape, the Atom builders, event splitting, scenario/config loading, and the
+ * HTTP routing all moved to gcalsrv.lua. The C side keeps only transport + framing. */
+
+/* Call http_handle(method,path,query,body) -> status,ctype,body; frame the full
+ * HTTP/1.0 response (status line + headers + body) into *resp. Returns the status. */
+static int lua_http(const char *method, const char *path, const char *query,
+                    const char *body, int bodylen, char **resp, int *resplen) {
+    int status = 500;
+    char ctype[128]; strcpy(ctype, "text/plain");
+    char *bodyout = NULL; int blen = 0;
+
+    EnterCriticalSection(&g_lua_lock);
+    lua_settop(g_L, 0);
+    lua_getglobal(g_L, "http_handle");
+    lua_pushstring(g_L, method);
+    lua_pushstring(g_L, path);
+    lua_pushstring(g_L, query ? query : "");
+    lua_pushlstring(g_L, body ? body : "", (size_t)bodylen);
+    if (lua_pcall(g_L, 4, 3, 0) != LUA_OK) {
+        logln("LUA: http_handle error: %s", lua_tostring(g_L, -1));
+    } else {
+        status = (int)luaL_optinteger(g_L, 1, 200);
+        strncpy(ctype, luaL_optstring(g_L, 2, "text/plain"), sizeof(ctype) - 1);
+        ctype[sizeof(ctype) - 1] = 0;
+        size_t n = 0;
+        const char *b = lua_tolstring(g_L, 3, &n);   /* copy the body out before we unlock */
+        blen = (int)n;
+        bodyout = malloc(blen + 1);
+        if (bodyout) { if (b) memcpy(bodyout, b, blen); bodyout[blen] = 0; } else blen = 0;
+    }
+    lua_settop(g_L, 0);
+    LeaveCriticalSection(&g_lua_lock);
+
+    struct sb out; sb_init(&out);
+    sb_addf(&out, "HTTP/1.0 %d %s\r\n", status, http_reason(status));
+    sb_addf(&out, "Content-Type: %s\r\n", ctype);
+    sb_addf(&out, "Content-Length: %d\r\n", blen);
+    sb_adds(&out, "Connection: close\r\n\r\n");
+    if (bodyout) sb_add(&out, bodyout, blen);
+    free(bodyout);
     *resp = out.p; *resplen = out.len;
-    return code;
+    return status;
+}
+
+/* POP3 action codes returned by lua_pop3() */
+enum { POP_SEND = 0, POP_QUIT = 1, POP_DROP = 2 };
+
+/* Call pop3_event(verb,arg) -> reply,action. *reply is malloc'd (caller frees) or NULL.
+ * reply may be multi-line (\r\n-joined); the worker appends the trailing CRLF. */
+static int lua_pop3(const char *verb, const char *arg, char **reply, int *replylen) {
+    int action = POP_SEND;
+    *reply = NULL; *replylen = 0;
+    EnterCriticalSection(&g_lua_lock);
+    lua_settop(g_L, 0);
+    lua_getglobal(g_L, "pop3_event");
+    if (lua_isfunction(g_L, -1)) {
+        lua_pushstring(g_L, verb);
+        lua_pushstring(g_L, arg ? arg : "");
+        if (lua_pcall(g_L, 2, 2, 0) != LUA_OK) {
+            logln("LUA: pop3_event error: %s", lua_tostring(g_L, -1));
+        } else {
+            size_t n = 0;
+            const char *r = lua_tolstring(g_L, 1, &n);   /* nil => no reply (drop) */
+            const char *act = luaL_optstring(g_L, 2, "send");
+            if (r) { *reply = malloc(n + 1); if (*reply) { memcpy(*reply, r, n); (*reply)[n] = 0; *replylen = (int)n; } }
+            if (!strcmp(act, "quit")) action = POP_QUIT;
+            else if (!strcmp(act, "drop")) action = POP_DROP;
+        }
+    }
+    lua_settop(g_L, 0);
+    LeaveCriticalSection(&g_lua_lock);
+    return action;
 }
 
 /* ---- HTTP request parsing ----------------------------------------------------- */
@@ -427,9 +331,8 @@ static void serve_http_request(SOCKET c, const char *peer, const char *req, int 
         return;
     }
     logln("HTTP %s: %s %s%s%s", peer, method, path, query[0] ? "?" : "", query);
-    struct cfg cf; cfg_load(&cf);
     char *resp; int rlen;
-    int code = http_handle(&cf, method, path, query, req + bo, bl, &resp, &rlen);
+    int code = lua_http(method, path, query, req + bo, bl, &resp, &rlen);
     logln("HTTP %s: -> %d (%d bytes)", peer, code, rlen);
     send_all(c, resp, rlen);
     free(resp);
@@ -471,15 +374,12 @@ static DWORD WINAPI pop3_worker(void *arg) {
     char peer[32]; peer_ip(c, peer, sizeof(peer));
     set_recv_timeout(c);
 
-    struct cfg cf; cfg_load(&cf);
-    if (!strcmp(cf.mail, "refuse")) { logln("POP3 %s: drop (mail=refuse)", peer); closesocket(c); return 0; }
-    int n = (!strcmp(cf.mail, "check")) ? cf.mailcount : 0;
-    if (n < 0) n = 0;
-    int size = n * 1024;
-    logln("POP3 %s: connect (mail=%s n=%d)", peer, cf.mail, n);
-
-    #define POPSEND(s) do { send_all(c, (s), (int)strlen(s)); send_all(c, "\r\n", 2); logln("POP3 %s: -> %s", peer, s); } while (0)
-    POPSEND("+OK gcal-xp POP3 ready");
+    /* greeting / refuse decision via Lua (verb "CONNECT") */
+    char *reply; int rlen;
+    int act = lua_pop3("CONNECT", "", &reply, &rlen);
+    if (act == POP_DROP) { logln("POP3 %s: drop (scenario)", peer); free(reply); closesocket(c); return 0; }
+    logln("POP3 %s: connect", peer);
+    if (reply) { send_all(c, reply, rlen); send_all(c, "\r\n", 2); logln("POP3 %s: -> %s", peer, reply); free(reply); }
 
     char line[1024]; int ll = 0;
     for (;;) {
@@ -491,16 +391,11 @@ static DWORD WINAPI pop3_worker(void *arg) {
             char verb[16]; int i = 0;
             while (line[i] && line[i] != ' ' && i < 15) { verb[i] = (char)toupper((unsigned char)line[i]); i++; }
             verb[i] = 0;
+            const char *sp = strchr(line, ' ');
             logln("POP3 %s: <- %s", peer, line);
-            if      (!strcmp(verb, "USER")) POPSEND("+OK user accepted");
-            else if (!strcmp(verb, "PASS")) { if (!strcmp(cf.mail, "error")) POPSEND("-ERR [AUTH] authentication failed"); else POPSEND("+OK mailbox ready"); }
-            else if (!strcmp(verb, "STAT")) { char b[64]; _snprintf(b, sizeof(b), "+OK %d %d", n, size); POPSEND(b); }
-            else if (!strcmp(verb, "LIST")) { char b[64]; _snprintf(b, sizeof(b), "+OK %d messages (%d octets)", n, size); POPSEND(b); for (int k = 1; k <= n; k++) { char l[32]; _snprintf(l, sizeof(l), "%d 1024", k); POPSEND(l); } POPSEND("."); }
-            else if (!strcmp(verb, "UIDL")) { POPSEND("+OK"); for (int k = 1; k <= n; k++) { char l[32]; _snprintf(l, sizeof(l), "%d msg%04d", k, k); POPSEND(l); } POPSEND("."); }
-            else if (!strcmp(verb, "CAPA")) POPSEND("-ERR no capabilities");
-            else if (!strcmp(verb, "QUIT")) { POPSEND("+OK bye"); break; }
-            else if (!strcmp(verb, "NOOP")) POPSEND("+OK");
-            else POPSEND("-ERR unknown command");
+            act = lua_pop3(verb, sp ? sp + 1 : "", &reply, &rlen);
+            if (reply) { send_all(c, reply, rlen); send_all(c, "\r\n", 2); logln("POP3 %s: -> %s", peer, reply); free(reply); }
+            if (act == POP_QUIT || act == POP_DROP) break;
         } else if (ll < (int)sizeof(line) - 1) {
             line[ll++] = ch;
         }
@@ -712,9 +607,8 @@ static DWORD WINAPI https_worker(void *arg) {
                 if (parse_reqline(req, method, sizeof(method), path, sizeof(path),
                                   query, sizeof(query), &bo, &bl, total)) {
                     logln("TLS %s: %s %s%s%s", peer, method, path, query[0] ? "?" : "", query);
-                    struct cfg cf; cfg_load(&cf);
                     char *resp; int rlen;
-                    int code = http_handle(&cf, method, path, query, req + bo, bl, &resp, &rlen);
+                    int code = lua_http(method, path, query, req + bo, bl, &resp, &rlen);
                     logln("TLS %s: -> %d (%d bytes)", peer, code, rlen);
                     tls_send(c, &ctx, &sz, resp, rlen);
                     free(resp);
@@ -793,6 +687,8 @@ int main(int argc, char **argv) {
 
     WSADATA w;
     if (WSAStartup(MAKEWORD(2, 2), &w) != 0) { logln("FATAL: WSAStartup failed"); return 1; }
+
+    if (!lua_init()) { logln("FATAL: Lua init failed — no request logic"); return 1; }
 
     if (want_install) do_install();
 

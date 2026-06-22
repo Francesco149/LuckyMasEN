@@ -8,7 +8,7 @@ Google account**. XP's `hosts` points `www.google.com → 127.0.0.1` and this se
 |---|---|---|
 | `:80`  | HTTP/1.0 (Winsock) | GData feeds — allcalendars list + event feed + add-event deep-link |
 | `:443` | HTTPS (**Schannel**) | `/accounts/ClientLogin` → `Auth=…` |
-| `:110` | POP3 (Winsock) | `USER`/`PASS`/`STAT` → mail count |
+| `:110` | POP3 (Winsock) | a working fake mailbox — `USER`/`PASS`/`STAT`/`LIST`/`UIDL`/`RETR`/`TOP` |
 
 Why native (vs. the old `code`-hosted Python): on XP the server speaks **Schannel** and the client is
 **WinINet** — the *same* 2007 stack, so the TLS handshake is **period-accurate by construction** (no modern-TLS
@@ -59,27 +59,45 @@ certutil -addstore -f Root C:\gcal-xp\xp-google.cer        REM LocalMachine\Root
 ## Run / flags
 
 ```bat
-gcalsrv.exe                 REM serve :80/:443/:110, install cert into Root (background)
+gcalsrv.exe                 REM serve :80/:443/:110 + a TRAY ICON, install cert into Root (background)
 gcalsrv.exe --no-cert       REM don't touch the cert stores (cert already trusted)
+gcalsrv.exe --install-cert  REM import the cert into LocalMachine\Root (silent, admin) and exit
+gcalsrv.exe --no-tray       REM headless: no tray/dialogs (for SMB-exec as LocalSystem), serve forever
 gcalsrv.exe --install       REM also: add the hosts redirect + copy self to Startup, then serve
 gcalsrv.exe --no-tls        REM HTTP + POP3 only (skip Schannel)
 gcalsrv.exe --http 8080 --https 8443 --pop 1110   REM alt ports (testing)
 ```
 
-Logs every request + handshake step to `gcalsrv.log` (next to the EXE). Reads `gcal-xp.ini` (next to the EXE,
-re-read per request) for the scenario.
+**Tray icon** (interactive runs): right-click → **Open gcalsrv.lua** (drops the embedded default if there's
+no external copy, then opens it in your editor), **About** (what it does + the repo link), **Close**. The
+server **hot-reloads** `gcalsrv.lua` when you save it (a broken edit keeps the previous script running and
+pops the Lua error in a message box). Logs every request to `gcalsrv.log` (next to the EXE).
 
-## Config (`gcal-xp.ini`, `key=value`, optional)
+## Customise — events & mail (edit `gcalsrv.lua`)
 
-| key | default | meaning |
-|---|---|---|
-| `calendar` | `schedule` | `schedule` (events) · `none` (empty) · `error` (403) |
-| `mail` | `check` | `check` (n>0) · `none` (0) · `error` (`-ERR`) · `refuse` (drop) |
-| `events` | `Dentist;Lunch with Konata;Buy doujinshi` | `;`-separated event titles |
-| `mailcount` | `3` | message count for `mail=check` |
-| `calname` / `account` / `tzoffset` | `Test Calendar` / `test@example.com` / `+09:00` | feed metadata |
+The mascot's calendar/mail content lives in `gcalsrv.lua` (re-read on save). Edit the two tables at the top:
 
-Bubble ↔ scenario mapping: same as `../gcal-emu/README.md`. (Future: a real local-calendar backend.)
+```lua
+local EVENTS = { ["2026-06-23"] = { { title = "Dentist", at = "10:00", where = "Akihabara" }, "Buy doujinshi" } }
+local MAIL   = { ["2026-06-23"] = { { from = "konata@...", subject = "new figs!!", body = "..." } } }
+```
+
+A date with events → `SerifCallenderSchedule` (titles); an absent/empty date → `SerifCallenderNone`. Mail
+count > 0 → `SerifMailCheck`, else `SerifMailNone`; the POP3 side is a **working fake mailbox** (STAT/LIST/
+UIDL/**RETR**/TOP), so a real mail client can log in and read the messages too. `TODAY`/identity knobs are up top.
+
+`gcal-xp.ini` (optional, next to the EXE) still **force-overrides** a scenario for testing: `calendar =
+none|error`, `mail = none|error|refuse`, `today = YYYY-MM-DD`, `events = A;B;C`, `mailcount = N`,
+`account`/`calname`/`tzoffset`.
+
+## Out of the box (via the LuckyMasEN installer)
+
+The English installer bundles `gcalsrv.exe`+`gcalsrv.lua` to `{app}\gcal-xp`, **trusts the cert** silently
+(`--install-cert` → LocalMachine\Root, as admin, no modal), **autostarts** the server (tray) for every user
+(`{commonstartup}`), and starts it immediately. The launcher's calendar/mail already point at `localhost`
+(host→localhost binpatch), so they reach it. *(Launcher-side zero-config — pre-seeding gcal's account so the
+calendar never prompts, and the Launch.ini `[Mail]` POP3 keys — still needs RE; today the calendar works
+after a one-time any-login and mail is configured via the launcher's Settings.)*
 
 ## Deploy / drive on XP (this LAN)
 
@@ -99,7 +117,11 @@ cert-trust path — the proof used in Session 4.
 
 ## Roadmap
 
-- ✅ **Lua request logic** (`gcalsrv.lua`) — done + validated on real XP; responses byte-identical to the
-  C version. Next: a real local-calendar backend (read events from a local file/ICS) — now a script edit.
-- First-run installer: silent cert install (certutil/registry, no modal) + `hosts` redirect + Startup autostart.
-- End-to-end: drive the real `gcal.exe`/launcher → capture the `SerifCallender*`/`SerifMail*` bubbles.
+- ✅ **Lua request logic** (`gcalsrv.lua`) — validated on real XP; byte-identical to the C version.
+- ✅ **Date-keyed events + a working fake POP3 mailbox** (EVENTS/MAIL tables; RETR-able) — the "real local
+  backend", as a documented script edit.
+- ✅ **Tray UI + hot-reload + Lua-error dialogs**; **silent cert install** (`--install-cert`).
+- ✅ **Installer auto-setup** — bundle + `{commonstartup}` autostart + silent cert trust.
+- End-to-end: drive the real `gcal.exe`/launcher → capture the `SerifCallender*`/`SerifMail*` bubbles
+  (Schedule/None done in Session 4). **Launcher-side zero-config** (pre-seed gcal's account; the
+  `Launch.ini [Mail]` POP3 keys) — needs RE.

@@ -89,6 +89,12 @@ so the mascots' calendar/mail work with no Google account:
   period-accurate TLS by construction; no modern-TLS coercion). Cert = self-signed `www.google.com`
   (RSA-2048/SHA-1) embedded as a PFX (`cert_pfx.h`), installed into XP's **Root** in-process so
   WinINet trusts it.
+- **Request logic + content in `gcalsrv.lua`** (Lua 5.4, embedded; an external `<exedir>\gcalsrv.lua`
+  overrides + **hot-reloads** on save): user-editable **date-keyed `EVENTS`/`MAIL` tables** drive the
+  bubbles (a working fake POP3 mailbox — STAT/LIST/UIDL/RETR/TOP). C↔Lua = `http_handle` + `pop3_event`.
+- **Tray UI** (Open gcalsrv.lua / About / Close; `--no-tray` = headless for SMB-exec); Lua errors pop a
+  message box. **`--install-cert`** imports the cert into LocalMachine\Root silently. The **installer
+  auto-installs** it: `{app}\gcal-xp` + `{commonstartup}` autostart + silent cert trust ([Run]).
 - **`tools/gcal-emu/gcal_emu.py`** is the protocol **oracle** (Python; retired as a deployed host,
   kept as the reference for the exact responses). Wire format + bubble↔scenario table:
   `docs/next-builds.md` §"Build 1"/§"Session 3".

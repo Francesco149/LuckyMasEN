@@ -479,3 +479,21 @@ Owner-directed "finish the remainder, then test." All the deferred non-binary su
 
 **Only deferred item left: the Launch.ini install-root path rewrite (the installer pins `{app}` via `[INI]`).**
 Next: rebuild the EN `setup.exe` with all of this, then live-test on real XP.
+
+### Session 11 (cont.) — gcal-xp: date-keyed events, fake POP3, tray, installer auto-setup
+Owner-directed, after the translation: make the calendar/mail server a real, customisable, out-of-the-box thing.
+- **gcalsrv.lua**: user-editable **date-keyed** `EVENTS["YYYY-MM-DD"]` / `MAIL["YYYY-MM-DD"]` tables (heavily
+  documented) replace the flat ini list; `pop3_event` is now a **working fake mailbox** (STAT/LIST/UIDL/RETR/
+  TOP — a real mail client can read it). gcal-xp.ini still force-overrides scenarios. Lua-5.4 tested.
+- **gcalsrv.exe**: a **tray icon** (Open gcalsrv.lua / About w/ the github.com/Francesco149/**LuckyMasEN** link /
+  Close), **hot-reload** on save (reload into a fresh state; keep the old one + a message box on a bad edit),
+  Lua-error dialogs, and **`--install-cert`** (LocalMachine\Root, silent). `--no-tray` keeps headless SMB-exec
+  runs non-blocking. Built i686/XP, smoke-tested under wine.
+- **Installer**: bundles the server to `{app}\gcal-xp`, **`{commonstartup}` autostart** (tray), and a [Run]
+  that trusts the cert silently then starts it. `setup.exe` recompiles + bundles it.
+- **Deferred (needs RE, flagged for the XP test):** launcher-side zero-config — pre-seeding gcal's account
+  (gcal.ini/gcal.dat format) so the calendar never prompts, and the `Launch.ini [Mail]` POP3 keys. Today the
+  calendar works after a one-time any-login; mail is set via the launcher's Settings.
+
+**Everything is built + committed. The remaining step is the on-XP test of the whole thing (translation +
+gcal-xp + installer) — the box is in NixOS.**

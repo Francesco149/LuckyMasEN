@@ -471,35 +471,53 @@ frm = "app/copy/真_dl.mink"
 to  = "app/copy/makoto_dl.mink"
 note = ".mink Makoto dl"
 
-# Screensavers (4 .scr). Visible name comes from a PE-resource string (deferred);
-# they install to system32 → handle with the installer stage.
+# Screensavers (4 .scr). ACTIVE: the Display-Properties screensaver picker shows the FILENAME (minus
+# .scr) — the .scr carry no JP name string (their type-6 strings are the lang-1033 screensaver-framework
+# config UI; only a lang-1041 VERSIONINFO is JP = the deferred boilerplate, not the picker name). So the
+# rename IS the display-name translation. They install to {sys} (system32) via the installer [Files] glob.
 [[rename]]
-active = false
 frm = "sys/らき☆マス：アイマス3D.scr"
 to  = "sys/LuckyMas - iM@S 3D.scr"
-note = ".scr iM@S 3D"
-todo = "rename + PE-resource display-name TL + system32 install all belong to the installer/PE-res stages"
+note = ".scr iM@S 3D (picker name = filename)"
 [[rename]]
-active = false
 frm = "sys/らき☆マス：アイマスコミック.scr"
 to  = "sys/LuckyMas - iM@S Comic.scr"
 note = ".scr iM@S Comic"
 [[rename]]
-active = false
 frm = "sys/らき☆マス：ちびキャラズ.scr"
 to  = "sys/LuckyMas - Chibi Characters.scr"
 note = ".scr Chibi Characters"
 [[rename]]
-active = false
 frm = "sys/らき☆マス：らき☆すたコミック.scr"
 to  = "sys/LuckyMas - Lucky Star Comic.scr"
-note = ".scr Lucky Star Comic (filename ASCII; display name uses '*' via future pe_res)"
+note = ".scr Lucky Star Comic (filename is ASCII; '*' is illegal in Windows paths)"
 
-# Wallpaper JPGs (~90) -> ASCII. Coupled to the 壁紙えらび.html href rewrite.
-[[rename]]
-active = false
-note = "wallpaper JPGs らき☆マス_<artist>_<WxH>.jpg -> LuckyMas_... (~90 files)"
-todo = "must rewrite the 96 <a href>/<img src> refs in 壁紙えらび.html in lockstep; artist segments need romaji too"
+# Wallpaper JPGs -> ASCII (project goal #2: no JP-locale dependency — a cp932 <img src>/<a href>
+# can't resolve on a non-JP-locale box). 84 files = 14 artists x 6 resolutions. ONE map drives both
+# the file renames and the lockstep rewrite of the HTML refs (runs after the wallpaper.html rename
+# above, hence `refs` points at the new name). Artist romaji = the ASCII img/thumb_<key> names, paired
+# to each JP artist by their HTML grouping (verified 1:1). Prefix らき☆マス -> LuckyMas (no '*' in paths).
+[[rename_map]]
+dir  = "app/wallpaper"
+glob = "らき☆マス_*.jpg"
+refs = "app/wallpaper/wallpaper.html"
+refs_encoding = "utf-8"
+note = "wallpaper JPGs らき☆マス_<artist>_WxH.jpg -> LuckyMas_<romaji>_WxH.jpg (84) + rewrite the HTML refs"
+[rename_map.subs]
+"らき☆マス_あずまゆき"   = "LuckyMas_azuma"
+"らき☆マス_あさば☆ひろむ" = "LuckyMas_asaba"
+"らき☆マス_あらきかなお"  = "LuckyMas_araki"
+"らき☆マス_あらたとしひら" = "LuckyMas_arata"
+"らき☆マス_いしざきうに"  = "LuckyMas_uni"
+"らき☆マス_ISO"          = "LuckyMas_iso"
+"らき☆マス_GUNP"         = "LuckyMas_gunp"
+"らき☆マス_芹沢謙"        = "LuckyMas_serip"
+"らき☆マス_高井夜音"      = "LuckyMas_yone"
+"らき☆マス_田中松太郎"    = "LuckyMas_tanaka"
+"らき☆マス_藤枝雅"        = "LuckyMas_miyabi"
+"らき☆マス_ヘラダミツル"  = "LuckyMas_herada"
+"らき☆マス_みそおでん"    = "LuckyMas_miso"
+"らき☆マス_水萌桜"        = "LuckyMas_minamo"
 
 # Other deferred surface (no-op placeholders, tracked here so nothing is lost):
 #  - MinkIt copy-engine path config: NO MinkIt.ini ships → RE where MinkIt.dll

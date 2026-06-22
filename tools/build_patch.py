@@ -27,6 +27,8 @@ Manifest op tables (applied in this fixed order; rename always last):
                                      either `subs[]` (decode .nut, find->replace, re-compress)
                                      or `src` (replace member bytes, e.g. an EN button PNG)
   [[rename]]     frm + to          — rename a file within the patched tree
+  [[rename_map]] dir+glob+subs{}   — bulk-rename matching files by a substring map + rewrite the
+                                     same substrings in a `refs` text file (assets + links in step)
 Every op may set `active = false` to record intent without applying (logged DEFERRED).
 String fields are templated with {install_root_jp}/{install_root_en} from [meta].
 """
@@ -37,7 +39,8 @@ from sygnas_repack import repack_acz, repack_packdata      # xvi / pak ops
 from sygnas_unpack import parse_acz, parse_packdata         # (parse_packdata: pak op member read)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OP_ORDER = ['xvi', 'text_keys', 'text_subst', 'text_file', 'binpatch', 'pe_res', 'pak', 'rename']
+OP_ORDER = ['xvi', 'text_keys', 'text_subst', 'text_file', 'binpatch', 'pe_res', 'pak',
+            'rename', 'rename_map']
 
 
 class PatchError(Exception):
@@ -251,9 +254,41 @@ def op_rename(e, ctx):
     return [f"    mv   {e['frm']}  ->  {e['to']}"]
 
 
+def op_rename_map(e, ctx):
+    """Bulk-rename files in `dir` matching `glob` by applying a shared substring map to their
+    NAMES, and rewrite the SAME substrings inside a `refs` text file (the page that links them) —
+    so a set of renamed assets and their references move in lockstep from one map. Used for the
+    wallpaper JPGs (らき☆マス_<artist>_WxH.jpg -> LuckyMas_<romaji>_WxH.jpg + the HTML <a>/<img>)."""
+    import glob as _glob
+    d = os.path.join(ctx['out'], tmpl(e['dir'], ctx['meta']))
+    subs = {tmpl(k, ctx['meta']): tmpl(v, ctx['meta']) for k, v in e['subs'].items()}
+    log = [f"    rename_map {e['dir']}  ({len(subs)} name subs)"]
+    n = 0
+    for path in sorted(_glob.glob(os.path.join(d, e['glob']))):
+        base = os.path.basename(path)
+        new = base
+        for frm, to in subs.items():
+            new = new.replace(frm, to)
+        if new != base:
+            os.rename(path, os.path.join(os.path.dirname(path), new))
+            n += 1
+    log.append(f"        renamed {n} file(s) matching {e['glob']}")
+    if e.get('refs'):
+        rp = os.path.join(ctx['out'], tmpl(e['refs'], ctx['meta']))
+        enc = e.get('refs_encoding', 'utf-8')
+        text = open(rp, 'rb').read().decode(enc)
+        total = 0
+        for frm, to in subs.items():
+            total += text.count(frm)
+            text = text.replace(frm, to)
+        open(rp, 'wb').write(text.encode(enc))
+        log.append(f"        rewrote {total} ref(s) in {e['refs']}")
+    return log
+
+
 OPS = {'xvi': op_xvi, 'text_keys': op_text_keys, 'text_subst': op_text_subst,
        'text_file': op_text_file, 'binpatch': op_binpatch, 'pe_res': op_pe_res,
-       'pak': op_pak, 'rename': op_rename}
+       'pak': op_pak, 'rename': op_rename, 'rename_map': op_rename_map}
 
 
 def build(originals, out, manifest_path):

@@ -366,3 +366,85 @@ renders on any locale, no ASCII constraint (unlike the ANSI-drawn `.Xvi` serifs 
   **Remaining JP is binary/hardcoded strings** — next session (post-/clear): the pin/hold-arrow **tooltip**
   and any other strings drawn via `*A` APIs straight from the binaries (RE + `binpatch`); also the `.Xvi`
   serif **☆→ASCII** locale pass. Deploy/drive recipe: `tools/deploy-xp.sh`.
+
+---
+
+## 2026-06-22 — Session 7: binary / hardcoded-string translation (all of it) + `.Xvi` ASCII pass
+
+The handoff surface — JP that's NOT in PE resources, drawn at runtime from string literals compiled
+into the binaries (`AppendMenuA` / `DrawTextA` / `MessageBox` / `SHBrowseForFolder`). `pe_res.py` can't
+see these. **Done end-to-end; build reproducible; sizes byte-preserved; owner live-test pending.**
+
+### New recon tool — `tools/scan_jp.py`
+`strings -e s` can't see cp932 (SJIS lead bytes are >0x7F → a JP run looks like garbage); `strings -e l`
+floods you with .rsrc + no section context. `scan_jp.py` segments a PE into **NUL-terminated cp932**
+literals (strict full-decode + all-printable → kills machine-code/pointer-table noise) and **UTF-16LE**
+runs, keeps only real kana/kanji (`pe_res.has_jp`), and reports each unique string with its **PE section**
+(tell a `.rdata`/`.data` hardcoded literal from an already-handled `.rsrc` resource), **occurrence count**
+(binpatch needs a unique match), and offset. Flags: `--enc cp932|utf16|both`, `--min`, `--min-jp`,
+`--section` (default skips `.text`/`(hdr)` where literals never live).
+- **Scan gotchas learned:** `.text`/headers are full of false-positive cp932 runs (filter by section);
+  a `.rdata` **pointer table** decodes as 2-char halfwidth-kana fields (filter `--min 3 --min-jp 2`);
+  **ASCII misread as wide** gives CJK codepoints (`"So"`→`潓`) — for wide, require ≥2 **kana** + ≥90%
+  "clean JP/ASCII". The CRT locale strings `ﾁ｣ﾚ｣`/`蠅陲[` appear in `.data` of **every** binary (ignore).
+
+### `binpatch` gains a cp932 mode (`build_patch.py`)
+Was `wide` bool (UTF-16LE, 2-byte NUL) | latin1. Now `_binpatch_enc(e)`: `wide=true` → UTF-16LE;
+else `encoding` (default latin1) with a **1-byte NUL** → set **`encoding="cp932"`** for SJIS literals.
+`old` encodes cp932 to match the image bytes; `new` is ASCII (cp932 passes ASCII through) + shorter →
+fits + NUL-pads. **Budget rule:** a JP char is 2 (wide) or 1–2 (SJIS) bytes, EN is 1 → narrow has tons
+of room; **wide is in CHARACTERS** and EN is usually *longer* than JP, so only wide strings whose JP
+char-count is inflated by embedded ASCII (`%d`, `Result Code`) leave room (see below).
+
+### What was patched (all `n=1` unique, size-preserving, JP gone, EN present — verified both directions)
+- **MinkIt.exe** (14, **cp932**): tray menu (`設定(&S)...`→`Options(&S)` — 11B can't fit `Settings(&S)...`;
+  `終了(&X)`→`Exit(&X)`); the **Setup "Event type" combo** (5 file-event labels: To Recycle Bin / Empty
+  Bin / Download from Internet / Delete / Copy/Move file); Preview defaults `(無題)`/`(不明)`→`(none)`/`(unk.)`
+  + `%sのﾌﾟﾚﾋﾞｭｰ`→`%s Preview`; the Startup tooltip, folder-picker title, force-quit MsgBox. **MinkIt has
+  no RT_MENU** (confirmed) → the tray menu IS these literals. **Preview Title/Author come from these
+  defaults, NOT the `.mink`** — the `info` chunk is a shared codec table, not per-file metadata
+  (`mink-format.md`), so no `.mink` data patch is needed.
+- **MinkIt.dll** (1, cp932): `初期化に失敗しました`→`Failed to initialize`.
+- **Launch.exe** (16, cp932): the **pin/hold-arrow tooltip** `このﾎﾞﾀﾝを押してｱﾌﾟﾘをﾄﾞﾛｯﾌﾟ`→`Drop an app on
+  this button` (the owner-flagged one), folder/file dialog titles, the `(*.*)` file filter (kept the `\t`
+  field separators), confirm/validation MsgBoxes, the `・・・`→`...` button label.
+- **gcal.exe** (9 cp932 + 9 wide): the GDI+ image-loader errors (casual `〜っす` style, **narrow** → would
+  mojibake) ASCII-ized; **wide** (MFC-Unicode) status/error/prompt: `Loading...` (the two `〜を取得して
+  います` status lines collapse to a generic — wide budget is chars, EN is longer), `Select a calendar.`,
+  `Network error`/`Auth error.`/`Exception` (kept the embedded `%d`/`%s`/`Result Code` structure exactly),
+  the `gcalcore.dll` path-info error, the Winsock-init error.
+- **gcalcore.dll** (3 wide): path-info + `例外`/`通信` errors (same wide strings as gcal.exe).
+
+### Left as-is (recorded; NOT user-facing runtime text)
+- **`ＭＳ Ｐゴシック` / `ＭＳ ゴシック`** — `CreateFontA` serif/dialog **facenames**, not displayed text.
+  cp932 → could mis-resolve on a non-JP ACP (the Latin alias "MS PGothic" likely works), but changing a
+  face risks serif rendering → **deferred; needs a live test** that "MS PGothic"/"MS Gothic" resolves.
+- **MFC AppWizard boilerplate** (`アプリケーション ウィザードで生成された…`) + dialog/version **TODO**
+  placeholders (`TODO: <ファイルの説明>` = the VERSIONINFO FileDescription, shows only in Explorer
+  Properties→Details) — dev leftovers / metadata, belong to the installer/version-stamp stage.
+
+### `.Xvi` serif `☆→ASCII` pass — fixed at the generator (`build_launcher_en.py` = source of truth)
+Scan of `patch/launcher/*.ini` found `☆`×5 (akira), `♪`×4 (amimami/azusa/haruka/miki), and — the real
+bug — **amimami had leftover untranslated JP**: MT-junk `→` in two serifs, and its **schedule-comment
+line lacked the leading `;`** (a SYGNAS inconsistency: amimami's source is bare `セリフ：カレンダー：予定
+アリ`) so it missed `COMMENTS{}` and passed through as raw cp932. Fixes (in the generator, so a regen can't
+re-introduce them): (1) `transform()` now tolerates a comment missing its `;`; (2) rewrote amimami's two
+junk-`→` serifs + dropped azusa's redundant `~` before `♪`; (3) global map adds `☆/★/♪`→`~`, fullwidth
+`：`→`:`, `　`→` `; (4) a **pure-ASCII assertion** (`raise SystemExit` if any byte >0x7E survives) — a
+permanent locale-safety guard for goal #2. Regenerated → **all 22 INIs pure ASCII**, `.Xvi` Ini round-trips
+**byte-exact**.
+
+### Verification
+`build_patch` applies 15 ops; **two builds hash-identical** (reproducible). Each touched binary: **size
+unchanged**, small localized byte-diff; re-scan shows **no real JP remains** (only float/pointer/CRT
+noise + the deferred facenames); every new EN string present `n=1`. The wide binpatch on gcal/gcalcore
+is the same op proven safe on these exact files by the Session-5 host→localhost patch (XP doesn't verify
+user-mode PE checksums; binpatch leaves them stale, harmless — `pe_res` re-fixes Launch/MinkIt last).
+- **Known cosmetic (not a regression):** `scan_jp` surfaces leftover **wide JP** in Launch.exe/MinkIt.exe
+  (`MinkIt!について`, `今すぐﾒｰﾙをﾁｪｯｸ(&M)`, …) — these are **dead `pe_res` relocation residue**: when an EN
+  menu/dialog blob is longer than the JP, `pe_res` writes it into `.rsrc` slack and **repoints the RVA**,
+  leaving the old JP blob as unreferenced bytes (the live, repointed resource is EN — verified each JP
+  residue has its EN twin present `n=1`). Invisible to the user; the app reads via the repointed RVA. A
+  future tidy-up (zero the old blob after relocating in `pe_res.patch`) would scrub it — deferred (the
+  live rendering was XP-validated in Session 6; not worth touching that path now).
+**⇒ Remaining = owner live-test on XP (the menus/tooltip/messages render EN), then the installer re-wrap.**

@@ -269,25 +269,41 @@ valid; owner-validated on real XP). Detail → [`re-notes.md`](re-notes.md) §"P
 - Tooling added: `tools/pe_res.py` (dump + surgical RT_MENU/RT_DIALOG patch + DLGTEMPLATE rebuilder +
   index-based geometry overrides). **Never use `lief.write()`** — it rebuilds the PE and crashes XP.
 
-## ▶ Next session (post-/clear) — binary / hardcoded-string patching
-The remaining JP is NOT in resources — it's drawn at runtime from strings baked into the binaries (or from
-container metadata). Hunt + `binpatch` them. **Tooling note:** the `binpatch` op (in `build_patch.py`) does
-whole-NUL-terminated **wide (UTF-16)** or **narrow (latin1)** string replace, NUL-padded, size-preserving.
-Hardcoded JP drawn via `*A` APIs is **cp932** (Shift-JIS) → **add a `cp932` encoding mode to `binpatch`**
-(encode `old` as cp932, `new` as ASCII; EN is shorter so it fits). Finding cp932 JP needs a **cp932-aware
-scan** (a small python "try-decode runs" pass or rizin/Ghidra) — plain `strings -e s` won't show it; wide JP
-shows with `strings -e l`.
+## ✅ Session 7 (2026-06-22) — binary / hardcoded-string TL DONE + `.Xvi` ASCII pass
+All four handoff TODOs done (full detail → [`re-notes.md`](re-notes.md) §"Session 7"):
+- New tool **`tools/scan_jp.py`** (cp932 + UTF-16 JP scanner; NUL-terminated-literal extraction, PE-section
+  aware, noise filters) — `strings` can't see cp932. **`binpatch` gained `encoding="cp932"`** (1-byte NUL,
+  SJIS `old` ↔ ASCII `new`).
+- **Patched** (all `n=1`, size-preserving, reproducible, verified both directions): **MinkIt.exe** (14 —
+  tray menu, the 5 event-type combo labels, Preview `(none)`/`(unk.)` defaults + `%s Preview`, messages),
+  **MinkIt.dll** (1), **Launch.exe** (16 — incl. the **pin-arrow tooltip** `Drop an app on this button`,
+  dialog titles, confirm/validation MsgBoxes, `・・・`→`...`), **gcal.exe** (9 cp932 image errors + 9 wide
+  status/error/prompt), **gcalcore.dll** (3 wide errors). ⚠️ **wide budget is in CHARS** (EN usually longer
+  than JP) → only wide strings padded by embedded ASCII (`%d`/`Result Code`) fit; pure-status → `Loading...`.
+- **MinkIt Preview Title/Author = the hardcoded `(無題)`/`(不明)` defaults, NOT `.mink` metadata** — the
+  `info` chunk is a shared codec table (`mink-format.md`), so no `.mink` data patch.
+- **`.Xvi` ☆→ASCII pass** fixed at the generator (`build_launcher_en.py`): comment-missing-`;` tolerance
+  (amimami), removed MT-junk `→`/`♪`, global `☆/★/♪`→`~` + fullwidth→ASCII, + a **pure-ASCII assert** guard.
+  All 22 INIs pure ASCII; `.Xvi` Ini round-trips byte-exact.
+- **Left as-is (recorded):** the `CreateFontA` facenames `ＭＳ Ｐゴシック`/`ＭＳ ゴシック` (not displayed
+  text; changing risks serif rendering → **live-test if "MS PGothic" resolves** before touching); MFC
+  AppWizard boilerplate + `TODO: <ファイルの説明>` VERSIONINFO placeholder (installer/version-stamp stage).
 
-TODO (owner-reported + surveyed):
-1. **MinkIt.exe** — tray context menu (Settings/Exit); the Setup **combo/list options** (event types / char
-   list); the **Preview title/author VALUES** (likely from the `.mink` **`info` chunk** metadata — see
-   `mink-format.md`; if so that's a `.mink` data patch, not a binpatch). MinkIt has **no RT_MENU**, so the
-   tray menu is `AppendMenu`'d from hardcoded strings.
-2. **Launch.exe** — the pin/hold-arrow **tooltip** (hardcoded; not a resource).
-3. **`.Xvi` serif ☆→ASCII pass** — a few launcher serifs still carry `☆` (drawn via `DrawTextA` = cp932 →
-   mojibakes on a non-JP locale). ASCII-ize in `tools/build_launcher_en.py` / `patch/launcher/*.ini`.
-4. Sweep the other binaries (`Launch.exe`/`gcal.exe`/`MinkIt.dll`) for any remaining hardcoded JP.
-   (Separate, behind the un-cracked `.nut` codec: the themed calc UI text in `data.pak` — deferred.)
+## ▶ Next session (post-/clear) — live-test the binary TL, then the installer re-wrap
+Translation surface is now **complete** (PE-resource + hardcoded + serifs all EN; only the deferred
+facenames/boilerplate/`.nut`-codec calc text remain). Two fronts:
+1. **Owner-driven live test on real XP** (the fast path — loop the owner in): deploy `out/patched/` via
+   `tools/deploy-xp.sh`, then eyeball that the new EN renders — MinkIt **tray menu** (Options/Exit) + the
+   **Setup "Event type" combo** + **Preview** defaults; Launch.exe **pin-arrow tooltip** + rename/delete
+   confirms + the **Settings validation** ("Mail check interval must be between 1 and 600."); gcal.exe
+   status/errors. **Watch the serif font** — confirm the JP `ＭＳ Ｐゴシック` facename still renders the
+   speech bubbles on the box; if it falls back ugly, patch it to the Latin "MS PGothic" (cp932 binpatch,
+   16B→10B fits) and re-test (this is the one held-back string).
+2. **English installer re-wrap** (the chosen deliverable): `innoextract` the user's own `setup.exe` →
+   drop in `out/patched/` → translate the Inno script (`[Languages]` + custom messages) + pin `{app}`=
+   `…\SYGNAS\LuckyMas` → recompile with **ISCC under wine**. Activates the deferred renames/path-rewrite
+   (install-root, `.mink`/`.scr`/JPG, autorun) + the VERSIONINFO/FileDescription fix. Adds the Inno
+   toolchain to the flake (not yet there).
 
 **Deploy/drive recipe:** `tools/deploy-xp.sh` (box is XP @ 10.0.10.113; SMBv1/NT1; blank-Admin; agent for
 GUI/screenshots). MinkIt needs its `MinkIt.dll` + `.mink` alongside the exe — push them from

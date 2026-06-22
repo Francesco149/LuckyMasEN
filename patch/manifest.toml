@@ -107,13 +107,139 @@ strings = [
   { old = "http://www.google.com/calendar/event?action=TEMPLATE&dates=%4d%02d%02d/%4d%02d%02d", new = "http://localhost/calendar/event?action=TEMPLATE&dates=%4d%02d%02d/%4d%02d%02d" },
 ]
 
+# ═════════════════════════════════════════════════════════════════════════════
+# HARDCODED runtime strings (NOT PE resources). Found with tools/scan_jp.py — these
+# are string literals compiled into the binaries, drawn at runtime by AppendMenu /
+# TextOut / MessageBox / SHBrowseForFolder, so pe_res.py can't see them.
+#
+# encoding="cp932": JP drawn via the ANSI (*A) APIs is Shift-JIS → it MOJIBAKES on a
+# non-JP locale (project goal #2), so ASCII-izing is locale-CRITICAL. `old` is matched
+# as cp932; `new` (ASCII) is shorter → fits + NUL-pads. EN char ≈ 1 byte vs 2 for a JP
+# char, so budgets are roomy. A few are kept tight (the byte budget is noted inline).
+# ═════════════════════════════════════════════════════════════════════════════
+
+# MinkIt.exe — the copy-animation engine front-end. It has NO RT_MENU: the tray menu is
+# AppendMenuA'd from these literals; the Setup "Event type" combo is filled from the 5
+# file-event labels; (無題)/(不明) are the Preview Title/Author defaults (the .mink `info`
+# chunk is a shared codec table, not per-file metadata — see mink-format.md — so the
+# Preview always shows these defaults). "設定(&S)..."(11B) can't fit "Settings(&S)..." →
+# "Options(&S)" keeps the mnemonic+style within budget.
+[[binpatch]]
+file = "app/copy/MinkIt.exe"
+encoding = "cp932"
+note = "MinkIt.exe — tray menu + event-type combo + Preview defaults + messages (hardcoded SJIS)"
+strings = [
+  { old = "終了(&X)", new = "Exit(&X)" },                                  # tray menu (8B)
+  { old = "設定(&S)...", new = "Options(&S)" },                           # tray menu (11B)
+  { old = "ごみ箱に捨てる", new = "To Recycle Bin" },                       # event type (14B)
+  { old = "ごみ箱を空", new = "Empty Bin" },                               # event type (10B)
+  { old = "Internetからのﾀﾞｳﾝﾛｰﾄﾞ", new = "Download from Internet" },      # event type (22B)
+  { old = "ﾌｧｲﾙの削除", new = "Delete" },                                  # event type (10B)
+  { old = "ﾌｧｲﾙｺﾋﾟｰ・移動", new = "Copy/Move file" },                      # event type (14B)
+  { old = "(なし)", new = "(none)" },                                      # default (6B)
+  { old = "(不明)", new = "(unk.)" },                                      # Author default (6B)
+  { old = "(無題)", new = "(none)" },                                      # Title default (6B)
+  { old = "%sのﾌﾟﾚﾋﾞｭｰ", new = "%s Preview" },                            # preview window title (11B)
+  { old = "ｱﾆﾒｰｼｮﾝﾌｧｲﾙのﾌｫﾙﾀﾞ", new = "Animation folder" },              # folder-picker (18B)
+  { old = "ｽﾀｰﾄｱｯﾌﾟにｼｮｰﾄｶｯﾄを作成します。", new = "Creates a shortcut in Startup." },
+  { old = "アニメーションが終わっていません。強制終了しますか?", new = "The animation hasn't finished. Force quit?" },
+]
+
+# MinkIt.dll — the engine. One init-failure message.
+[[binpatch]]
+file = "app/copy/MinkIt.dll"
+encoding = "cp932"
+note = "MinkIt.dll — init-failure message (hardcoded SJIS)"
+strings = [
+  { old = "初期化に失敗しました", new = "Failed to initialize" },           # (20B)
+]
+
+# Launch.exe — the mascot launcher. Drawn via DrawTextA/MessageBoxA. Includes the
+# pin/hold-arrow tooltip ("このボタンを押してアプリをドロップ") the owner flagged, plus
+# folder/file dialog titles, confirm/validation messages, and the "..." button label.
+[[binpatch]]
+file = "app/launcher/Launch.exe"
+encoding = "cp932"
+note = "Launch.exe — tooltip + dialog titles + confirm/validation messages (hardcoded SJIS)"
+strings = [
+  { old = "このﾎﾞﾀﾝを押してｱﾌﾟﾘをﾄﾞﾛｯﾌﾟ", new = "Drop an app on this button" },  # pin-arrow tooltip (28B)
+  { old = "gcalcore.dllが見つかりません", new = "gcalcore.dll not found" },   # (28B)
+  { old = "データファイルが壊れています", new = "Data file is corrupted." },    # (28B)
+  { old = "(不明)", new = "(unk.)" },                                       # (6B)
+  { old = "・・・", new = "..." },                                          # ellipsis label (6B)
+  { old = "%sを削除しますか?", new = "Delete %s?" },                         # (17B)
+  { old = "メールクライアントを起動", new = "Launch mail client" },           # (24B)
+  { old = "%sを削除します。", new = "Deleting %s." },                        # (16B)
+  { old = "%sを上書きします。", new = "Overwriting %s." },                    # (18B)
+  { old = "ｽﾀｰﾄｱｯﾌﾟに登録します", new = "Add to Startup" },                  # (20B)
+  { old = "ﾃﾞｰﾀﾌｫﾙﾀﾞの選択", new = "Data folder" },                        # folder dialog title (15B)
+  { old = "全てのﾌｧｲﾙ(*.*)\t*.*\t", new = "All files(*.*)\t*.*\t" },        # file filter (20B)
+  { old = "表示ｷｬﾗを指定して下さい", new = "Select a character" },           # (23B)
+  { old = "値が範囲内にありません", new = "Value is out of range" },          # (22B)
+  { old = "「ﾒｰﾙﾁｪｯｸの間隔」は1～600までで指定してください", new = "Mail check interval must be between 1 and 600." },
+  { old = "ﾌｧｲﾙの参照", new = "Browse..." },                               # browse button (10B)
+]
+
+# gcal.exe — calendar client. Its GDI+ image-loader errors are narrow SJIS (casual dev
+# "〜っす" style); ASCII-ize them too (mojibake-safe).
+[[binpatch]]
+file = "app/launcher/gcal.exe"
+encoding = "cp932"
+note = "gcal.exe — GDI+ image-loader error messages (hardcoded SJIS)"
+strings = [
+  { old = "リソースが見つからないっす。", new = "Resource not found." },
+  { old = "リソースのサイズが０っす。", new = "Resource size is 0." },
+  { old = "リソースが読み込めなかったっす。", new = "Couldn't read the resource." },
+  { old = "ヒープにメモリが確保できなかったっす。", new = "Couldn't allocate heap memory." },
+  { old = "メモリブロックが廃棄されてるかサイズが０っす。", new = "Memory block freed, or size is 0." },
+  { old = "ストリームからBitmapを作成できなかったっす。", new = "Couldn't create Bitmap from stream." },
+  { old = "なんかエラー", new = "Some error" },
+  { old = "ストリームの作成に失敗しました。", new = "Failed to create stream." },
+  { old = "画像を表示しないままプログラムを続行しますか？", new = "Continue without showing the image?" },
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WIDE (UTF-16) hardcoded JP in the MFC-Unicode calendar binaries. These render fine
+# as Unicode on any locale (no mojibake) — so this is English-completeness, not a
+# locale fix. ⚠️ Both sides are 2 bytes/char, so the budget is in CHARACTERS and EN is
+# usually longer than JP: only strings whose JP char-count is inflated by embedded
+# ASCII (%d / "Result Code") leave room. The two pure-status strings only fit a generic
+# "Loading...". MFC AppWizard boilerplate + the dialog/version TODO placeholders +
+# the MS-Gothic font names are left as-is (not user-facing / risky) — see notes below.
+# ─────────────────────────────────────────────────────────────────────────────
+[[binpatch]]
+file = "app/launcher/gcal.exe"
+wide = true
+note = "gcal.exe — calendar status/error/prompt strings (wide)"
+strings = [
+  { old = "カレンダーを取得しています", new = "Loading..." },                 # fetch status (13 ch)
+  { old = "予定を取得しています", new = "Loading..." },                       # fetch status (10 ch)
+  { old = "他 %d 件", new = " +%d" },                                       # "+N more" count (6 ch)
+  { old = "表示するカレンダーを選択してください", new = "Select a calendar." }, # prompt (18 ch)
+  { old = "gcalcore.dll のパス情報が取得できませんでした。", new = "Can't get gcalcore.dll path." },
+  { old = "認証エラーが発生しました。\n\nResult Code : %d\n", new = "Auth error.\n\nResult Code : %d\n" },
+  { old = "例外が発生しました。\nエラー: %d\n%s\n", new = "Exception\nError %d\n%s\n" },
+  { old = "通信エラーが発生しました。\n\nResult Code : %d\n%s", new = "Network error\n\nResult Code : %d\n%s" },
+  { old = "Windows ソケットの初期化に失敗しました。", new = "Winsock init failed." },
+]
+
+[[binpatch]]
+file = "app/launcher/gcalcore.dll"
+wide = true
+note = "gcalcore.dll — error strings (wide)"
+strings = [
+  { old = "gcalcore.dll のパス情報が取得できませんでした。", new = "Can't get gcalcore.dll path." },
+  { old = "例外が発生しました。\nエラー: %d\n%s\n", new = "Exception\nError %d\n%s\n" },
+  { old = "通信エラーが発生しました。\n\nResult Code : %d\n%s", new = "Network error\n\nResult Code : %d\n%s" },
+]
+
 # ─────────────────────────────────────────────────────────────────────────────
 # PE-resource menus + dialogs (Launch.exe, lang 1041). Unicode resources (no ASCII
 # constraint). Keyed by exact JP source string; one map covers RT_MENU + RT_DIALOG
 # (shared strings like ｷｬﾝｾﾙ/Cancel translate once). build_patch warns on unmapped
 # JP. Patched surgically (only these blobs change; dialogs round-trip byte-faithful).
 # Right-click menus + the per-app item menu + the Settings/rename dialogs.
-# (Still JP: the pin/hold-arrow tooltip — not a resource string; RE it as a binpatch.)
+# (The pin/hold-arrow tooltip + other hardcoded strings are done above via [[binpatch]].)
 # ─────────────────────────────────────────────────────────────────────────────
 [[pe_res]]
 file = "app/launcher/Launch.exe"

@@ -20,7 +20,8 @@ Manifest op tables (applied in this fixed order; rename always last):
   [[text_keys]]  file + keys{}     — replace INI `KEY=` values, preserve all else
   [[text_subst]] file + subs[]     — literal find->replace pairs within a text file
   [[text_file]]  file + src        — replace a whole file with a tracked EN version
-  [[binpatch]]   file + strings[]  — replace whole NUL-terminated (wide|narrow) strings
+  [[binpatch]]   file + strings[]  — replace whole NUL-terminated strings in place
+                                     (wide=true UTF-16LE | encoding="cp932" SJIS | latin1)
   [[rename]]     frm + to          — rename a file within the patched tree
 Every op may set `active = false` to record intent without applying (logged DEFERRED).
 String fields are templated with {install_root_jp}/{install_root_en} from [meta].
@@ -125,19 +126,25 @@ def op_text_file(e, ctx):
     return [f"    file {e['file']}  <- {e['src']}  ({old} -> {os.path.getsize(dst)}b){tail}"]
 
 
-def _enc_str(s, wide):
-    return s.encode('utf-16-le' if wide else 'latin1')
+def _binpatch_enc(e):
+    """Resolve the (encoding, char-size) for a binpatch entry. `wide=true` = UTF-16LE
+    (2-byte NUL); else an `encoding` (default latin1) with a 1-byte NUL. Use
+    `encoding="cp932"` for hardcoded JP drawn via the ANSI (*A) APIs — `old` encodes as
+    Shift-JIS to match the bytes in the image, `new` is ASCII (which cp932 passes through
+    unchanged) and shorter, so it fits + NUL-pads."""
+    if e.get('wide', False):
+        return 'utf-16-le', 2
+    return e.get('encoding', 'latin1'), 1
 
 
 def op_binpatch(e, ctx):
     path = os.path.join(ctx['out'], tmpl(e['file'], ctx['meta']))
-    wide = e.get('wide', False)
-    cs = 2 if wide else 1
+    enc, cs = _binpatch_enc(e)
     data = bytearray(open(path, 'rb').read())
-    log = [f"    bin  {e['file']} ({'wide' if wide else 'narrow'})"]
+    log = [f"    bin  {e['file']} ({enc})"]
     for s in e['strings']:
         old, new = tmpl(s['old'], ctx['meta']), tmpl(s['new'], ctx['meta'])
-        oe, ne = _enc_str(old, wide), _enc_str(new, wide)
+        oe, ne = old.encode(enc), new.encode(enc)
         if len(ne) > len(oe):
             raise PatchError(f"binpatch {e['file']}: new {new!r} longer than old {old!r}")
         term = b'\x00' * cs

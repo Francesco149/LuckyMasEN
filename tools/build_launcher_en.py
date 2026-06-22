@@ -41,8 +41,8 @@ TRANS = {
   'Ami Ami!|A new version is out~|Mami Mami!|We gotta check it, right~',
   'Bro, you got mail!',
   'Uwaaah|we couldn\'t go grab the mail!',
-  'Nothing came in→!|Bro\'s so laaame→♪',
-  'There\'s nothing today~|Bro, if you\'re bored|let\'s play some Xbox→!',
+  'Nothing came in!|Bro\'s so laaame♪',
+  'There\'s nothing today~|Bro, if you\'re bored|let\'s play some Xbox!',
   'Bro\'s schedule today is|<%SCHEDULE%>|huh|Let\'s smash it to pieces!',
   'Bro, bro, what do we do!|We can\'t get into the calendar',
   'Hey bro|to use the calendar you need a Google Calendar ID']),
@@ -60,7 +60,7 @@ TRANS = {
   'Producer|you seem to have some mail~',
   'Oh my~|looks like the mail settings|aren\'t quite right~',
   'Oh dear~|did I drop the letter|somewhere along the way~?',
-  'Oh my~|if there are no outings planned|then I won\'t get lost, will I~♪',
+  'Oh my~|if there are no outings planned|then I won\'t get lost, will I♪',
   'Um, today you have|<%SCHEDULE%>|I see',
   'Oh my~|I couldn\'t get into the calendar|whatever shall we do~',
   'Producer|to use the calendar you need a Google Calendar ID']),
@@ -240,6 +240,8 @@ def transform(core, slug):
             return key + '=' + br(d[key])
     if core in COMMENTS:
         return COMMENTS[core]
+    if ';' + core in COMMENTS:          # tolerate a JP comment missing its leading ';'
+        return COMMENTS[';' + core]     # (amimami's schedule label) -> EN comment
     return core
 
 def main():
@@ -257,12 +259,20 @@ def main():
             cr = line.endswith('\r'); core = line[:-1] if cr else line
             out.append(transform(core, slug) + ('\r' if cr else ''))
         text = '\n'.join(out)
+        # ASCII-ize MT smart-punctuation + JP decorations: the app draws serifs via
+        # DrawTextA (cp932), so ANY non-ASCII byte mojibakes on a non-JP locale (goal #2).
+        # ☆/★/♪ (cutesy tics) -> ~ ; fullwidth colon/space -> ASCII.
         for a, b in (('—', '--'), ('–', '-'), ('…', '...'),
-                     ('‘', "'"), ('’', "'"), ('“', '"'), ('”', '"')):
+                     ('‘', "'"), ('’', "'"), ('“', '"'), ('”', '"'),
+                     ('☆', '~'), ('★', '~'), ('♪', '~'), ('：', ':'), ('　', ' ')):
             text = text.replace(a, b)
+        bad = sorted({c for c in text if ord(c) > 0x7E})
+        if bad:                          # locale-safety guard: serifs MUST be pure ASCII
+            raise SystemExit(f"{slug}.ini: non-ASCII survived (extend the map): "
+                             + ' '.join(f'U+{ord(c):04X}({c})' for c in bad))
         open(os.path.join(dst, slug + '.ini'), 'wb').write(text.encode('cp932'))
         n += 1
-    print(f'wrote {n} English launcher INIs -> patch/launcher/')
+    print(f'wrote {n} English launcher INIs -> patch/launcher/ (all pure ASCII)')
 
 if __name__ == '__main__':
     main()

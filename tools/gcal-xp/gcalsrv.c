@@ -168,7 +168,7 @@ static int lua_init(void) {
     char err[600];
     if (!lua_load_into(g_L, err, sizeof(err))) {
         logln("LUA: %s", err);
-        if (g_tray) MessageBoxA(NULL, err, "gcal-xp \xe2\x80\x94 Lua error", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
+        if (g_tray) MessageBoxA(NULL, err, "gcal-xp - Lua error", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
         return 0;
     }
     logln("LUA: ready");
@@ -184,7 +184,7 @@ static void lua_reload(void) {
     char err[600];
     if (!lua_load_into(nL, err, sizeof(err))) {
         logln("LUA reload: %s", err);
-        if (g_tray) MessageBoxA(NULL, err, "gcal-xp \xe2\x80\x94 Lua error (kept the previous script)",
+        if (g_tray) MessageBoxA(NULL, err, "gcal-xp - Lua error (kept the previous script)",
                                 MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
         lua_close(nL);
         return;
@@ -717,13 +717,13 @@ static HWND            g_tray_wnd = NULL;
 static NOTIFYICONDATAA g_nid;
 
 static const char *ABOUT_TEXT =
-    "gcal-xp \xe2\x80\x94 fake Google server for Lucky*Mas\r\n"
+    "gcal-xp - fake Google server for Lucky*Mas\r\n"
     "\r\n"
     "Runs on your PC so the desktop mascots' calendar and mail work with no\r\n"
     "Google account: it answers as www.google.com over Windows' own 2007 TLS\r\n"
-    "stack, serving calendar events + POP3 mail \xe2\x80\x94 all locally.\r\n"
+    "stack, serving calendar events + POP3 mail - all locally.\r\n"
     "\r\n"
-    "Set your own events/mail by editing gcalsrv.lua (tray menu \xe2\x86\x92 Open\r\n"
+    "Set your own events/mail by editing gcalsrv.lua (tray menu -> Open\r\n"
     "gcalsrv.lua); it hot-reloads when you save.\r\n"
     "\r\n"
     "Part of the LuckyMasEN English patch:\r\n"
@@ -738,7 +738,13 @@ static void open_lua(HWND h) {
         FILE *f = fopen(path, "wb");
         if (f) { fwrite(GCALSRV_LUA, 1, GCALSRV_LUA_LEN, f); fclose(f); logln("wrote default gcalsrv.lua for editing"); }
     }
-    ShellExecuteA(h, "open", path, NULL, NULL, SW_SHOWNORMAL);
+    /* .lua has no XP file association, so ShellExecute "open" does nothing -> open in Notepad
+     * explicitly (quote the path; it contains spaces under Program Files). */
+    {
+        char param[MAX_PATH + 4];
+        _snprintf(param, sizeof(param), "\"%s\"", path);
+        ShellExecuteA(h, NULL, "notepad.exe", param, NULL, SW_SHOWNORMAL);
+    }
 }
 
 static LRESULT CALLBACK tray_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {

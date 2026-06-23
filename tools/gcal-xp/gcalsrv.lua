@@ -1,4 +1,4 @@
--- gcalsrv.lua — request logic + YOUR calendar/mail content for the らき☆マス
+-- gcalsrv.lua - request logic + YOUR calendar/mail content for the Lucky*Mas
 -- native fake-Google server (gcalsrv.exe). Pure Lua 5.4 (stdlib only).
 --
 -- The C host (gcalsrv.c) owns sockets + Schannel TLS + POP3 line framing + the
@@ -7,26 +7,26 @@
 --   pop3_event(verb, arg)                   -> reply:string|nil, action:"send"|"quit"|"drop"
 -- C exposes:  gcalsrv_log(msg)   gcalsrv_exedir()
 --
--- ════════════════════════════════════════════════════════════════════════════
---  ★ CUSTOMISE HERE — what the desktop mascots show. Edit + save; the server
+-- ============================================================================
+--  * CUSTOMISE HERE - what the desktop mascots show. Edit + save; the server
 --    re-reads this file on EVERY request (when run as the external
 --    <exedir>\gcalsrv.lua, which overrides the copy baked into the EXE), so
---    there's no rebuild or restart — change it, then click the mascot again.
+--    there's no rebuild or restart - change it, then click the mascot again.
 --
 --  The launcher's right-click menu has "Check Schedule Now" / "Check Mail Now";
 --  what the mascot finds picks her speech bubble:
---      calendar — today has event(s) -> SerifCallenderSchedule (she reads the titles)
+--      calendar - today has event(s) -> SerifCallenderSchedule (she reads the titles)
 --                 today is empty      -> SerifCallenderNone   ("no plans today")
---      mail     — unread > 0          -> SerifMailCheck       ("you've got mail")
+--      mail     - unread > 0          -> SerifMailCheck       ("you've got mail")
 --                 unread = 0          -> SerifMailNone
---  (To see the *error* bubbles, force them from gcal-xp.ini — see the foot of this file.)
--- ════════════════════════════════════════════════════════════════════════════
+--  (To see the *error* bubbles, force them from gcal-xp.ini - see the foot of this file.)
+-- ============================================================================
 
 -- Your appointments, keyed by date "YYYY-MM-DD". Each day is a LIST of events;
 -- an event is either a plain title string, or a table to add a time / place:
 --     { title = "Dentist", at = "10:00", where = "Akihabara" }
 -- The special key ["*"] is a WILDCARD shown on any day that has no entry of its own
--- (so there are demo events out of the box) — replace it with your own, or delete it
+-- (so there are demo events out of the box) - replace it with your own, or delete it
 -- for "no plans unless I add the date". A specific date OVERRIDES the wildcard; a date
 -- set to an empty list {} forces SerifCallenderNone for that day.
 local EVENTS = {
@@ -43,7 +43,7 @@ local EVENTS = {
 -- Your inbox, keyed by date "YYYY-MM-DD" (["*"] = wildcard, same as above). Each day is
 -- a LIST of messages; a message is { from = , subject = , body = } (or just a subject
 -- string). The mascot only COUNTS them (Check vs None), but a real POP3 client on :110
--- can log in and RETR/read them — so this is a working fake mailbox, not just a count.
+-- can log in and RETR/read them - so this is a working fake mailbox, not just a count.
 local MAIL = {
   ["*"] = {                                           -- demo inbox out of the box
     { from = "konata@lucky.example", subject = "new figs just dropped!!",
@@ -63,15 +63,15 @@ local ACCOUNT  = "you@lucky.example"
 local CALNAME  = "My Calendar"
 local TZOFFSET = "+09:00"                 -- your UTC offset, GData style
 
--- ════════════════════════════════════════════════════════════════════════════
---  Engine below — routing + the Google GData / POP3 wire formats. You usually
+-- ============================================================================
+--  Engine below - routing + the Google GData / POP3 wire formats. You usually
 --  don't need to touch this; the data above is what you edit.
--- ════════════════════════════════════════════════════════════════════════════
+-- ============================================================================
 
 local EXEDIR = (gcalsrv_exedir and gcalsrv_exedir()) or "."
 local INI    = EXEDIR .. "\\gcal-xp.ini"
 
--- Optional gcal-xp.ini (key=value), re-read per request — lets a TEST HARNESS
+-- Optional gcal-xp.ini (key=value), re-read per request - lets a TEST HARNESS
 -- force a scenario without editing this script. All keys are optional:
 --   calendar = none | error           -- else: the EVENTS table drives the day
 --   mail     = none | error | refuse  -- else: the MAIL table drives the day

@@ -99,6 +99,29 @@ local function today_str(ini) return ini.today or TODAY or os.date("%Y-%m-%d") e
 local ESC = { ["&"] = "&amp;", ["<"] = "&lt;", [">"] = "&gt;", ['"'] = "&quot;" }
 local function xesc(s) return (tostring(s):gsub('[&<>"]', ESC)) end
 
+-- percent-encode / decode for the click-through URLs below
+local function urlenc(s)
+  return (tostring(s):gsub("[^%w%-%._~]", function(c) return ("%%%02X"):format(c:byte()) end))
+end
+local function urldec(s)
+  return (tostring(s):gsub("+", " "):gsub("%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end))
+end
+
+-- A per-event alternate link. gcal.exe reads <link rel='alternate'>'s href into the event and uses
+-- it for TWO things: the ShellExecute target when you click the event, AND the per-weekday-column
+-- row key in the month grid -- so without a UNIQUE href every event collapses onto ONE line and a
+-- click opens the app folder. We hand each event a unique localhost URL in the same add-event
+-- TEMPLATE shape gcal.exe builds itself, so a click opens our /calendar/event page (below).
+local function event_link(ini, gy, gm, gd, title, where, idx)
+  local ymd = ("%04d%02d%02d"):format(gy, gm, gd)
+  local q = ("action=TEMPLATE&dates=%s/%s&text=%s&i=%d"):format(ymd, ymd, urlenc(title), idx)
+  if where and where ~= "" then q = q .. "&location=" .. urlenc(where) end
+  return {
+    href = "http://localhost/calendar/event?" .. q,
+    id   = ("tag:localhost,2007:event/%s/%s/%d"):format(ini.account or ACCOUNT, ymd, idx),
+  }
+end
+
 local ATOM_NS =
   "xmlns='http://www.w3.org/2005/Atom' " ..
   "xmlns:gd='http://schemas.google.com/g/2005' " ..
@@ -188,6 +211,9 @@ local function events_feed(ini, groups)
       out[#out + 1] = "  <entry>"
       out[#out + 1] = "    <title type='text'>" .. xesc(title) .. "</title>"
       out[#out + 1] = "    <content type='text'>" .. xesc(title) .. "</content>"
+      local lnk = event_link(ini, gy, gm, gd, title, where, i)
+      out[#out + 1] = "    <id>" .. xesc(lnk.id) .. "</id>"
+      out[#out + 1] = "    <link rel='alternate' type='text/html' href='" .. xesc(lnk.href) .. "'/>"
       out[#out + 1] = ("    <gd:when startTime='%04d-%02d-%02dT%02d:%02d:00.000%s' " ..
                        "endTime='%04d-%02d-%02dT%02d:%02d:00.000%s'/>")
                       :format(gy, gm, gd, sh, sm, tz, gy, gm, gd, eh, em, tz)
@@ -198,6 +224,25 @@ local function events_feed(ini, groups)
   end
   out[#out + 1] = "</feed>"; out[#out + 1] = ""
   return table.concat(out, "\n")
+end
+
+-- Render the /calendar/event page (the add-event TEMPLATE target): used both by gcal.exe's own
+-- click-a-day-to-add affordance and by our per-event links, so it just reflects the query back.
+local function event_page(query)
+  local p = {}
+  for k, v in (query or ""):gmatch("([^&=]+)=([^&]*)") do p[k] = urldec(v) end
+  local d = p.dates and p.dates:match("^(%d%d%d%d%d%d%d%d)") or ""
+  local date = (#d == 8) and (d:sub(1, 4) .. "-" .. d:sub(5, 6) .. "-" .. d:sub(7, 8)) or (p.dates or "")
+  local title = (p.text and p.text ~= "") and p.text or "(untitled)"
+  local rows = { { "Title", title }, { "Date", date } }
+  if p.location and p.location ~= "" then rows[#rows + 1] = { "Where", p.location } end
+  local out = { "<!DOCTYPE html><html><head><meta http-equiv='Content-Type' content='text/html; charset=UTF-8'><title>", xesc(title),
+                "</title></head><body><h2>", xesc(title), "</h2><table>" }
+  for _, r in ipairs(rows) do
+    out[#out + 1] = "<tr><td><b>" .. xesc(r[1]) .. ":</b></td><td>" .. xesc(r[2]) .. "</td></tr>"
+  end
+  out[#out + 1] = "</table><p><small>gcal-xp local calendar</small></p></body></html>"
+  return table.concat(out)
 end
 
 function http_handle(method, path, query, body)
@@ -215,7 +260,7 @@ function http_handle(method, path, query, body)
     local groups = (ini.calendar == "none") and {} or collect_events(ini, query)
     return 200, ATOM, events_feed(ini, groups)
   elseif method == "GET" and path == "/calendar/event" then
-    return 200, "text/html", "<html><body>gcal-xp: add-event template (no-op stub)</body></html>"
+    return 200, "text/html; charset=UTF-8", event_page(query)
   end
   return 404, "text/plain", "Not Found\n"
 end

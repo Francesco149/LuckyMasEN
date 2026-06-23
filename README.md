@@ -11,7 +11,14 @@ original SYGNAS file is ever redistributed.
 
 ![The English installer: the faithful 586×364 Lucky☆Star wizard, with bundled MS PGothic, on an XP with no East-Asian language pack](docs/screenshots/installer-wizard-faithful-586x364.png)
 
-<!-- hero screenshots to add later: the desktop mascots in action; the themed calculators; the wallpaper picker -->
+**Everything below is running in English on real Windows XP SP3** — full writeup + more screenshots on the
+**[project page ↗](https://lolisamurai.neocities.org/luckymas.html)**.
+
+| | |
+|:---:|:---:|
+| ![Desktop mascots and the MinkIt copy animation, with the Settings and Preview dialogs Englished](docs/screenshots/minkit-desktop.png)<br>**Desktop mascots & copy animation** | ![Miki's "you've got mail" speech bubble, served by the local fake-Google POP3 server](docs/screenshots/mail-miki.png)<br>**"You've got mail"** |
+| ![A Lucky☆Star-themed calculator with its baked button labels re-drawn in English](docs/screenshots/calc-imas.png)<br>**Themed calculators** | ![The doujin unit converter: fps↔ms, BPM, page-count↔paper thickness, tax](docs/screenshots/calc-convert.png)<br>**Unit conversions** |
+| ![gcal's full month grid reading today's events from the local server, with an event detail page](docs/screenshots/gcal-calendar.png)<br>**The month grid** | ![The launcher Settings dialog — every menu, label and tooltip translated in the PE resources](docs/screenshots/settings.png)<br>**Launcher settings** |
 
 ---
 
@@ -55,10 +62,6 @@ discover it. Thank you for making something with so much soul.
 | 📦 **The installer** | SYGNAS's own Inno Setup wizard (full-screen blue gradient, Lucky☆Star art, pixel-exact 586×364) | Re-wrapped in English from **your** `setup.exe`, faithful to the original look | [end-user-build.md](docs/end-user-build.md) |
 
 ### The calendar, with no Google account
-
-| `SerifCallenderSchedule` — today's events | `SerifCallenderNone` — empty calendar |
-|:---:|:---:|
-| ![today's schedule bubble](docs/screenshots/gcal-schedule-bubble.png) | ![no plans bubble](docs/screenshots/gcal-none-bubble.png) |
 
 Hiyori on real **Windows XP SP3**, reading her calendar from our **native XP-local fake-Google server**
 ([`tools/gcal-xp/`](tools/gcal-xp/README.md)) — a single ~300 KB Win32 EXE that answers as

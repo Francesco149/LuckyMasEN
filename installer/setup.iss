@@ -102,6 +102,12 @@ Source: "{#FontFile}"; DestDir: "{tmp}"; Flags: dontcopy
 ; gcal-xp server + its editable request-logic script -> {app}\gcal-xp (the cert is embedded in the EXE).
 Source: "{#GcalSrv}\gcalsrv.exe"; DestDir: "{app}\gcal-xp"; Flags: ignoreversion
 Source: "{#GcalSrv}\gcalsrv.lua"; DestDir: "{app}\gcal-xp"; Flags: ignoreversion
+; Pre-seed the calendar account (captured post-login) so the launcher's calendar check works out of the
+; box with NO login prompt -- a MISSING gcal.dat made the original launcher hang on the check (frozen
+; mascot, no network call). The local server ignores credentials, so this throwaway blob is universal
+; and not machine-bound (no DPAPI header). These are OUR seed files, not SYGNAS originals.
+Source: "seed\gcal.ini"; DestDir: "{app}\launcher"; Flags: ignoreversion
+Source: "seed\gcal.dat"; DestDir: "{app}\launcher"; Flags: ignoreversion
 
 [Icons]
 ; Start Menu group = SYGNAS\LuckyMas.  Launcher/calendar need cwd = their own dir
@@ -128,6 +134,14 @@ Name: "{userdesktop}\Lucky Mas Launcher"; Filename: "{app}\launcher\Launch.exe";
 ; Pin the launcher's menu targets to the actual install dir.  Launch.exe reads these absolute
 ; Exec paths via the ANSI API, so {app} (ASCII) keeps them locale-safe (goal #2).  Titles ship
 ; English in Launch.ini already (patch/manifest.toml text_keys).
+; --- out-of-the-box defaults (owner-requested) ---
+; A default mascot (Konata Izumi) so one appears immediately; her folder = the launcher dir (the .Xvi).
+Filename: "{app}\launcher\Launch.ini"; Section: "Data"; Key: "Folder"; String: "{app}\launcher"
+Filename: "{app}\launcher\Launch.ini"; Section: "Data"; Key: "Chara"; String: "konata.Xvi"
+; Check the (local) Google calendar on startup -- safe now that the account is pre-seeded (no hang).
+Filename: "{app}\launcher\Launch.ini"; Section: "Calendar"; Key: "Boot"; String: "1"
+; The "you've got mail" bubble opens this email client (Outlook Express ships on every XP).
+Filename: "{app}\launcher\Launch.ini"; Section: "Mail"; Key: "Client"; String: "{pf}\Outlook Express\msimn.exe"
 Filename: "{app}\launcher\Launch.ini"; Section: "Launch"; Key: "Exec000"; String: "{app}\calc\WinCalcImas.exe"
 Filename: "{app}\launcher\Launch.ini"; Section: "Launch"; Key: "Exec001"; String: "{app}\calc\WinCalcLucky.exe"
 Filename: "{app}\launcher\Launch.ini"; Section: "Launch"; Key: "Exec002"; String: "{app}\launcher\gcal.exe"
@@ -136,11 +150,8 @@ Filename: "{app}\launcher\Launch.ini"; Section: "Launch"; Key: "Exec004"; String
 Filename: "{app}\launcher\Launch.ini"; Section: "Launch"; Key: "Exec009"; String: "{sys}\desk.cpl"
 ; MinkIt's animation folder (no MinkIt.ini ships originally -> the EN install writes it; *.mink live here).
 Filename: "{app}\copy\MinkIt.ini"; Section: "Path"; Key: "Folder"; String: "{app}\copy"
-; Pre-seed gcal's account so the calendar connects out of the box. gcal.exe reads [SESSION] EMAIL from
-; gcal.ini (RE'd: GetPrivateProfileStringW "SESSION"/"EMAIL"); the password is in a binary gcal.dat, but
-; the local server ignores credentials (ClientLogin returns Auth= for anything). If gcal still prompts on
-; first run, any login works -- it then saves the account itself.
-Filename: "{app}\launcher\gcal.ini"; Section: "SESSION"; Key: "EMAIL"; String: "you@lucky.example"
+; (The calendar account gcal.ini + gcal.dat are shipped as files in [Files] above -- pre-seeding the
+; credential blob is what stops the original launcher hanging on the first calendar check.)
 
 [Run]
 ; (1) Trust the server's www.google.com/localhost cert, as admin, into LocalMachine\Root — silent,

@@ -524,3 +524,41 @@ self-verifies decode==input before returning, and is even slightly tighter than 
   members are byte-identical. **Translation surface is now complete** (only the deferred facenames —
   fine when PGothic present, which the installer bundles — + MFC/VERSIONINFO boilerplate + the textless
   `.mink` sprite codec remain). Live-on-XP render check still pending (box was in NixOS this session).
+
+---
+
+## Session 14 (2026-06-23) — MinkIt `.mink` info-codec + gcal.exe event-draw internals
+
+### MinkIt `.mink` `info` codec (the third LZSS — cracked, byte-exact on all 10)
+Decompiled `MinkIt.dll`: `GetExtraInfo`@0x10001a70 / `FUN_100018e0`@0x100018e0 read the `info` chunk via
+`FUN_10002570`@0x10002570 (mmap the named chunk) → `FUN_100023e0`@0x100023e0 (decoder) → parse `Title=`/
+`Author=`/`Pattern=`/`Interval=` keys. The decoder + bit reader `FUN_10002350`@0x10002350:
+- chunk = `[u32 decompressed_size][bitstream]`; bits **MSB-first**, cursor walks the whole chunk.
+- per token: control bit **0 = literal** (next 8 bits = a byte); **1 = back-ref** (8-bit distance back,
+  4-bit length; copied byte-by-byte → overlap/RLE OK). Both fields RAW (no `+threshold`); 256 B window.
+- **stops on source-EOF**: `FUN_10002350` returns EOF the moment it *loads* the final chunk byte (never
+  consumed) — so a valid stream's tokens end on a byte boundary and the last byte is a throwaway terminator.
+  The decoder ignores `decompressed_size` for stopping (only mallocs `size+100` with it).
+- Decoded info is the same for a character's `_copy` + `_dl`. `(無題)`/`(不明)` in MinkIt.exe are only the
+  Title/Author **fallbacks** (used when a key is absent), NOT — as the old notes said — the always-shown text.
+Ported to `tools/sygnas_unpack.mink_info_decompress` + `sygnas_repack.mink_info_compress`/`repack_mink`
+(greedy bit-encoder, NUL-literal byte-align + terminator, self-verify). `docs/mink-format.md` updated.
+
+### gcal.exe month-grid event drawing (items 3+4 — one shared root cause)
+`CGoogleEvent` Atom parser (~all.c L7240-7345): reads `id`, `title`, `gd:when`, `gd:where`, `gCal:color`,
+and **`link[@rel='alternate']/@href`**. The drawer `FUN_00409980`@0x409980 (per-day-cell event list) +
+the click hit-test `FUN_004032a0`@0x4032a0:
+- each drawn event becomes a 0x34-byte hit object: `*obj=2` (clickable type), `obj+4..+0x10`=rect,
+  **`obj+0x14` (=`obj[5]`) = the event's href** (copied from `event+0x1c`, L7679; also L1494-1520 / L3260).
+- click (`FUN_004032a0` L1604/L1624): obj type `1` → opens the day-detail dialog; type `2` →
+  `ShellExecuteW(0,"open", obj[5], …)` — i.e. **opens the href in the browser**.
+- row layout: event Y = `FUN_0040a050(date,event,…) * 0xd + cell_top` (0xd=13 px/row). `FUN_0040a050`
+  @0x40a050 assigns the row by matching **`event+0x1c` (the href)** against a per-weekday-column slot table
+  (`DAT_0045e114 + col*0x50`, ≤0x14 rows) — a stable unique href keeps a multi-day event on one row across
+  columns. `FUN_00408880`@0x408880 is an insertion-sort of the day's events by (start-time, key), not a dedup.
+- **Consequence:** our feed gave every event an EMPTY href (no `<link>`/`<id>`) → identical slot key → all
+  events collapse to row 0 (the "one line" bug) AND `ShellExecuteW("")` → cwd (the "opens the folder" bug).
+  Fixed feed-side by emitting a unique per-event `<id>` + alternate `<link href>` (see `gcalsrv.lua`).
+- The day-cell itself also builds a type-2 object whose href is the add-event TEMPLATE
+  `http://…/calendar/event?action=TEMPLATE&dates=%4d%02d%02d/%4d%02d%02d` (L1490) — clicking empty day space
+  opens "add event". We reuse that same URL shape for the per-event links so one `/calendar/event` handler serves both.

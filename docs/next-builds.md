@@ -551,3 +551,43 @@ lm_<n> -import originals/installed/app/<path> -overwrite -scriptPath ../openrece
 
 **Suggested order:** pe_res URL nudge (quick) → MinkIt info-codec crack + names + format doc → gcal buttons
 relocation → gcal click-link + events-layout. All earlier fixes are committed + on the q9650 test box.
+
+## ✅ Session 14 (2026-06-23) — info-codec cracked + gcal per-event link; 2 items XP-gated
+Worked the 5 RE items. **3 done + committed**, 2 deferred to an XP-supervised session (visual/risk-gated).
+
+1. **✅ MinkIt `.mink` info-codec CRACKED → English Titles** (the headline). The `info` chunk is MinkIt's OWN
+   bit-LZSS (a *third* codec): `[u32 size][MSB-first bitstream]`, control bit 0=literal(8b) / 1=back-ref
+   (8-bit dist, 4-bit len, overlap-OK), halts on source-EOF (last src byte = unread terminator). Ported
+   byte-exact from `MinkIt.dll FUN_100023e0`+`FUN_10002350`; decodes all 10 `.mink` to clean cp932
+   (`Title=`/`Author=SYGNAS`/`RefURL=`/`Pattern=118`/`Interval=33`). **This disproved the old "info = shared
+   codec table" note** — it IS per-character metadata. Tooling: `sygnas_unpack.mink_info_decompress` +
+   `sygnas_repack.mink_info_compress`/`repack_mink` (greedy bit-encoder, NUL-literal byte-align, self-verify;
+   `--selftest-mink` round-trips all 10). New `build_patch` `[[mink_info]]` op retitles the 5 → ASCII
+   (Konata/Kagami/Chihaya/Makoto/Yayoi); a0/m0 stay byte-identical. Doc: `docs/mink-format.md`. Commit `8617349`.
+3. **✅ gcal "click an event → opens the launcher folder"** + 4. **✅ "events all on one line"** — ONE root
+   cause. gcal.exe parses each event's `<link rel='alternate'>/@href` (all.c ~L7286) into `CGoogleEvent+0x1c`,
+   used for BOTH the ShellExecute click target (~L7679/L1625) AND the per-weekday-column row key in
+   `FUN_0040a050` (a unique href keeps a multi-day event on one row across columns). Our feed emitted no
+   `<id>`/`<link>` per event → empty href → all events collapse to slot 0 (one line) + click ShellExecutes
+   `""` → cwd. **Fix** (`gcalsrv.lua`): emit a unique `<id>` + `<link href>` per event — a localhost add-event
+   TEMPLATE URL (date+text+index, +location) → distinct rows + a click that opens our `/calendar/event` page
+   (now a real Title/Date/Where details view, not the no-op stub). Verified well-formed XML + unique hrefs/ids
+   with lua5.4. ⚠️ **Item 4's on-grid result still wants an XP visual confirm** (FUN_0040a050's full slot logic
+   is 943 B / multi-day-aware; the feed-side root cause is fixed + low-risk). Commit `a3fcf11`.
+
+### Deferred to an XP-supervised session (visual judgment / crash risk)
+2. **gcal 3 toolbar buttons — needs string RELOCATION (high-risk PE surgery).** Custom-drawn (all.c ~L1055/
+   L1085/L1116): `SetString(L"更新",2)` @x=8 w=20, `L"表示設定",4` @x=0x26 w=0x28, `L"動作設定",4` @x=0x58 w=0x28;
+   each `TextOutW(hdc, x, 6, …)` + a hit-rect `{x,y,w,h}` in `unaff_ESI[8..0x13]`. The wide literals are packed
+   tight in `.rdata` (**file offsets 0x4b298 / 0x4b2a0 / 0x4b2ac**, 6/10/10 B — no slack for in-place growth).
+   EN (Refresh/View/Options) is far wider than 2/4 full-width JP → must relocate the 3 strings to a cave +
+   repoint the `push offset` + bump the `push <len>` immediates (2→…, 4→…) + shift every x/width immediate
+   (TextOutW x AND the `unaff_ESI[...]` rect stores) + probably widen the title bar. Beyond the in-place
+   `binpatch` op (needs a .text/.rdata immediate-patcher + cave allocator); layout (overlap/fit) only checkable
+   on XP. (表示設定→calendar-select modal; 動作設定→GoogleAccount dialog.)
+5. **MinkIt About/Preview "URL" control nudge — NO blind change; geometry is already clean.** Dumped the rects
+   (`/tmp/dlg_geom.py` walk of RT_DIALOG): PREVIEWDLG value fields #0/#1/#2 are aligned at x=40, end at x+cx=180
+   in a 183-wide dialog (3 px margin); labels end at 39 (1 px gap). ABOUTDLG has no URL static (just `(C)JAK`,
+   `MINKIT`, version, 2 runtime Edits w/ margin). The Session-13 "move URL left 2px" was a hypothesis (rects
+   un-dumped); a blind −2 px would OVERLAP the "URL:" label + break #0/#1/#2 alignment. **Needs an XP screenshot
+   to identify the actual clipped control before any change** (owner-driven visual call).

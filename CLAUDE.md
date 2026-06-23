@@ -66,7 +66,7 @@ so the mascots' calendar/mail work with no Google account:
 Every file we patch goes through ONE pipeline → spec in `docs/patch-system.md`. `manifest.toml` is the
 single source of truth (one entry per file + op + note; `active=false` = recorded-but-deferred);
 `build_patch.py` mirrors `originals/installed/`→`out/patched/` (gitignored), applies ops, writes
-`PATCH-LOG.txt`. Ops: `xvi`/`text_keys`/`text_subst`/`text_file`/`binpatch`/`pe_res`/`pak`/`img_text`/`rename`/`rename_map`. Reproducible.
+`PATCH-LOG.txt`. Ops: `xvi`/`text_keys`/`text_subst`/`text_file`/`binpatch`/`pe_res`/`pak`/`img_text`/`mink_info`/`rename`/`rename_map`. Reproducible.
 `pe_res` (`tools/pe_res.py`) **surgically** patches PE-resource menus/dialogs (lang 1041) + does geometry
 overrides — **never `lief.write()`** (it rebuilds the PE and crashes XP). `binpatch` does size-preserving
 NUL-terminated string replace: `wide=true` (UTF-16) | `encoding="cp932"` (SJIS, for JP drawn via `*A` APIs)
@@ -74,13 +74,16 @@ NUL-terminated string replace: `wide=true` (UTF-16) | `encoding="cp932"` (SJIS, 
 `data.pak`: per-member `.nut` string `subs` (decode via the cracked LZSS — `sygnas_unpack.pak_decompress`/
 `sygnas_repack.pak_compress` — find/replace, re-compress) + `gen="calc_png"` (retext the baked button-label
 PNGs from the user's own images via `tools/calc_png.py`, MS PGothic). `img_text` retexts loose baked-text
-images (the wallpaper section headers, same `calc_png` engine); `rename_map` bulk-renames files by a
-substring map + rewrites refs in lockstep. **The translation surface is COMPLETE** — all PE-resource UI,
-all hardcoded/runtime JP, the themed calculators (`calmain.nut` + button PNGs), the wallpaper picker (84
-JPGs + HTML refs ASCII'd; 壁紙の設定方法/壁紙一覧/モニターサイズ header images retexted), and the 4 screensaver
-filenames (= their Display-Properties names) are EN. Held back (recorded, non-text): the `CreateFontA`
-facenames (`ＭＳ Ｐゴシック`; fine when PGothic present — the installer bundles it), MFC/VERSIONINFO
-boilerplate, and the textless `.mink` sprite codec.
+images (the wallpaper section headers, same `calc_png` engine); `mink_info` retitles the MinkIt mascot
+names (decode each `.mink` `info` chunk via the cracked third LZSS — `sygnas_*.mink_info_*`/`repack_mink` —
+swap `Title=` → ASCII, re-compress; the strings the engine's Settings list + Preview show); `rename_map`
+bulk-renames files by a substring map + rewrites refs in lockstep. **The translation surface is COMPLETE** —
+all PE-resource UI, all hardcoded/runtime JP, the themed calculators (`calmain.nut` + button PNGs), the
+wallpaper picker (84 JPGs + HTML refs ASCII'd; 壁紙の設定方法/壁紙一覧/モニターサイズ header images retexted),
+the 4 screensaver filenames (= their Display-Properties names), and the 5 MinkIt mascot Titles (Konata/
+Kagami/Chihaya/Makoto/Yayoi) are EN. Held back (recorded, non-text): the `CreateFontA` facenames
+(`ＭＳ Ｐゴシック`; fine when PGothic present — the installer bundles it), MFC/VERSIONINFO boilerplate, and
+the textless `.mink` **a0/m0 sprite** codec (the `info` metadata codec is now cracked; a0/m0 carry no text).
 End goal = **English installer re-wrapped from the user's own `setup.exe`** (ISCC under wine; consumes
 `out/patched/`). **Locale rule** (goal #2): app-read text (Launch.ini, `.Xvi` serifs via `*A` APIs) =
 **pure ASCII**; readme = UTF-8+BOM; HTML = UTF-8. **host→localhost** done in `gcalcore.dll`+`gcal.exe`

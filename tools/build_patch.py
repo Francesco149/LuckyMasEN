@@ -26,6 +26,8 @@ Manifest op tables (applied in this fixed order; rename always last):
   [[pak]]        file + member[]   — rebuild a PACKDATA .pak (calc data.pak): each member is
                                      either `subs[]` (decode .nut, find->replace, re-compress)
                                      or `src` (replace member bytes, e.g. an EN button PNG)
+  [[mink_info]]  glob + subs[]     — rewrite the per-character Title=/… in .mink `info` chunks
+                                     (decode the cracked info codec, find->replace, re-compress)
   [[rename]]     frm + to          — rename a file within the patched tree
   [[rename_map]] dir+glob+subs{}   — bulk-rename matching files by a substring map + rewrite the
                                      same substrings in a `refs` text file (assets + links in step)
@@ -35,12 +37,12 @@ String fields are templated with {install_root_jp}/{install_root_en} from [meta]
 import os, sys, re, shutil, tomllib, argparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sygnas_repack import repack_acz, repack_packdata      # xvi / pak ops
-from sygnas_unpack import parse_acz, parse_packdata         # (parse_packdata: pak op member read)
+from sygnas_repack import repack_acz, repack_packdata, repack_mink   # xvi / pak / mink_info ops
+from sygnas_unpack import parse_acz, parse_packdata, mink_chunks, mink_info_decompress
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OP_ORDER = ['xvi', 'text_keys', 'text_subst', 'text_file', 'binpatch', 'pe_res', 'pak',
-            'img_text', 'rename', 'rename_map']
+            'img_text', 'mink_info', 'rename', 'rename_map']
 
 
 class PatchError(Exception):
@@ -244,6 +246,50 @@ def op_pak(e, ctx):
     return log
 
 
+def op_mink_info(e, ctx):
+    """Rewrite the per-character `Title=`/… strings inside `.mink` `info` chunks — the text the
+    MinkIt Settings list (control 0x3ec) + the Preview "Title:" actually show (proven per-file
+    metadata via the cracked info codec, NOT the engine's (none)/(unk.) fallbacks). `glob` selects
+    the files; each carries one character's `info`, so we apply whichever `subs` match (cp932
+    find->replace on the decoded text), re-compress, and rebuild the container. EN must be pure
+    ASCII (locale rule: app-read text). Every sub must land on ≥1 file; every matched file must
+    change exactly once."""
+    import glob as _glob
+    enc = e.get('encoding', 'cp932')
+    subs = [(tmpl(s['old'], ctx['meta']), tmpl(s['new'], ctx['meta'])) for s in e['subs']]
+    files = sorted(_glob.glob(os.path.join(ctx['out'], tmpl(e['glob'], ctx['meta']))))
+    log = [f"    mink_info {e['glob']}  ({len(files)} file(s), {len(subs)} sub(s))"]
+    if not files:
+        raise PatchError(f"mink_info {e['glob']}: no files matched")
+    hits = {old: 0 for old, _ in subs}
+    for path in files:
+        orig = open(path, 'rb').read()
+        off, size = mink_chunks(orig)['info']
+        text = mink_info_decompress(orig[off:off+size]).decode(enc)
+        changed = []
+        for old, new in subs:
+            c = text.count(old)
+            if c:
+                text = text.replace(old, new); hits[old] += c
+                changed.append(f"{old!r}->{new!r}")
+        if len(changed) != 1:
+            raise PatchError(f"mink_info {os.path.basename(path)}: matched {len(changed)} sub(s) "
+                             f"(want exactly 1): {changed}")
+        new_info = text.encode(enc)
+        bad = [chr(b) for b in new_info if b > 0x7f]
+        if bad:
+            raise PatchError(f"mink_info {os.path.basename(path)}: non-ASCII in new info text "
+                             f"(app-read; locale rule): {bad[:8]}")
+        new_mink = repack_mink(orig, new_info)
+        open(path, 'wb').write(new_mink)
+        log.append(f"        {os.path.basename(path):<22} {', '.join(changed)}  "
+                   f"({len(orig)}->{len(new_mink)}b)")
+    missing = [old for old, n in hits.items() if n == 0]
+    if missing:
+        raise PatchError(f"mink_info {e['glob']}: sub(s) never matched any file: {missing}")
+    return log
+
+
 def op_rename(e, ctx):
     frm = os.path.join(ctx['out'], tmpl(e['frm'], ctx['meta']))
     to = os.path.join(ctx['out'], tmpl(e['to'], ctx['meta']))
@@ -317,7 +363,8 @@ def op_rename_map(e, ctx):
 
 OPS = {'xvi': op_xvi, 'text_keys': op_text_keys, 'text_subst': op_text_subst,
        'text_file': op_text_file, 'binpatch': op_binpatch, 'pe_res': op_pe_res,
-       'pak': op_pak, 'img_text': op_img_text, 'rename': op_rename, 'rename_map': op_rename_map}
+       'pak': op_pak, 'img_text': op_img_text, 'mink_info': op_mink_info,
+       'rename': op_rename, 'rename_map': op_rename_map}
 
 
 def build(originals, out, manifest_path):

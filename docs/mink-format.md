@@ -4,8 +4,8 @@ Reverse-engineered from the 2007 「らき☆マス」disc (MSVC-2005 native bin
 **simple little-endian chunk/file directories** — none is the undocumented dead-end the scope doc
 feared. Offsets below are verified against the real files in `originals/installed/`.
 
-Status: **directory layouts solved; the ACZ text + PACKDATA `.nut` codecs are cracked.** Open: only
-the `.mink` `a0`/`m0` **sprite** codec (carries no text — doesn't gate the TL).
+Status: **directory layouts solved; the ACZ text, PACKDATA `.nut`, and `.mink` `info` codecs are
+cracked.** Open: only the `.mink` `a0`/`m0` **sprite** codec (carries no text — doesn't gate the TL).
 
 ---
 
@@ -29,18 +29,31 @@ Chunks (かがみ_copy.mink):
 
 | name   | off       | size        | what |
 |--------|-----------|-------------|------|
-| `info` | 0x40      | 0x60 (96 B) | fixed header — see below |
+| `info` | 0x40      | 0x60 (96 B) | per-character metadata, LZSS-compressed — see below |
 | `a0`   | 0xA0      | ~0x2DD510 (≈3.0 MB) | sprite/atlas stream (codec) |
 | `m0`   | 0x2DD5B0  | ~0x1C2A20 (≈1.85 MB)| mask/alpha stream (codec) |
 
-- **`info` is NOT per-character metadata.** Its first 0x40 bytes are *byte-identical* between
-  different characters (かがみ vs こなた): `51 00 00 00 2a 1a 4e 86 c3 28 f5 04 …`. → a **fixed
-  codec/key table or dictionary**, shared by all `.mink`. (High-entropy after the first u32.)
+- **`info` IS per-character metadata** (an earlier note here guessed "fixed codec table" — wrong;
+  it decompresses to per-character text). It is `[u32 decompressed_size][LZSS bitstream]` in
+  MinkIt's own bit codec ([§Compression](#compression--mink-info--a-third-lzss--cracked)). Decoded,
+  every `.mink` is a tiny cp932 INI (CRLF-terminated keys):
+  ```
+  Title=こなた          ← the name shown in the Settings list (control 0x3ec) + Preview "Title:"
+  Author=SYGNAS        ← Preview "Author:"
+  RefURL=http://sygnas.jp/
+  Pattern=118          ← animation frame count
+  Interval=33          ← frame interval (ms)
+  ```
+  Read by `MinkIt.dll!GetExtraInfo` (@0x10001a70): it scans the decoded text for `Title=`/`Author=`
+  keys (others ignored) and stores them in a per-`.mink` struct (stride 0x180; Title at +0, Author
+  at +0x40). `MinkIt.exe`'s `(無題)`/`(不明)` are only the **fallback** Title/Author (shown if the key
+  is absent). The EN patch rewrites `Title=` to ASCII via `build_patch`'s `[[mink_info]]` op
+  (`tools/sygnas_repack.py:repack_mink`), leaving a0/m0 byte-identical.
 - **`a0` and `m0` both begin** `38 47 03 01 21 13 47 04 70 18 04 01 01 31 b4 10` — identical across
   characters *and* across `_copy`/`_dl`. → a **common stream header** for the sprite codec. The
   payload is **not plain SJIS/PNG/BMP** (a text scan yields only high-entropy false positives) →
-  it is **compressed or encrypted**. Cracking this codec is the one hard RE task left; the loader is
-  `MinkIt.dll` (start there in Ghidra — it has the only code that touches these bytes).
+  it is **compressed or encrypted**. Cracking this sprite codec is the one hard RE task left; the
+  loader is `MinkIt.dll` (start there in Ghidra — it has the only code that touches these bytes).
 - Naming guess: `a0` = animation/atlas 0, `m0` = mask 0 (per-pixel transparency for the layered window).
 
 ---
@@ -128,6 +141,29 @@ encoder `tools/sygnas_repack.pak_compress`):
 `calmain.nut` holds the converter tool's display strings (note-length / fps / paper-thickness) →
 translated to ASCII via build_patch's `[[pak]]` op; `calculator/calimas/callucky.nut` are comments-only.
 
+## Compression — `.mink` `info` = a third LZSS (✅ cracked)
+
+The `.mink` `info` chunk uses **MinkIt's own** bit-oriented LZSS — distinct again from the ACZ and
+PACKDATA codecs. Ported byte-exact from `MinkIt.dll` (`FUN_100023e0` decoder + `FUN_10002350` bit
+reader) and round-trips all 10 `.mink` (`tools/sygnas_unpack.mink_info_decompress` /
+`tools/sygnas_repack.mink_info_compress`):
+- Chunk = `[u32 decompressed_size][bitstream]`. Bits are pulled **MSB-first** within each byte and
+  the byte cursor advances across the whole chunk.
+- Each **token** starts with a 1-bit control flag:
+  - **`0` = literal** — the next **8 bits** are one output byte.
+  - **`1` = back-reference** — **8 bits = distance** (1..255, bytes back from the current output
+    position) then **4 bits = length** (copied byte-by-byte, so overlap/RLE is allowed). Note both
+    fields are raw (no `+threshold` bias), and the window is only 256 B — fine, the chunks are ~80 B.
+- **Termination is by source-EOF, not a count:** the bit reader returns EOF the instant it *loads*
+  the final chunk byte (that byte is never consumed), so a valid stream's tokens end exactly on a
+  byte boundary and the last byte is a throwaway terminator. The decoder does not use
+  `decompressed_size` to stop (it sizes the output buffer with it). Our encoder reproduces this:
+  greedy match, then pad to a whole byte with NUL-literals (which decode to NULs that also
+  NUL-terminate the engine's text scan), then append one terminator byte.
+
+The decoded text is the per-character metadata documented in [§MINK](#mink--appcopymink-mascot-copydownload-animations);
+the EN patch retitles it via `[[mink_info]]` (`tools/build_patch.py`).
+
 Still open — **`.mink` `a0`/`m0`** (sprite + mask): Okumura yields a run of `0x20` (ring-init
 leakage) → **not** that codec; a separate sprite stream (`38 47 03 01 21 13 47 04 …`, header
 identical across all files). Carries no translatable text → deferred (a sprite-editing nicety;
@@ -136,5 +172,8 @@ unstripped, cdecl) in Ghidra.
 
 ## Tooling
 
-`tools/` will grow an unpacker/repacker per format (Python + `construct`; the directory math above is
-enough to round-trip the **stored** chunks today). The codec is the gate for the compressed chunks.
+`tools/sygnas_unpack.py` + `tools/sygnas_repack.py` round-trip all three text/metadata codecs
+(ACZ `Ini`, PACKDATA `.nut`, MINK `info`) byte-exact; `build_patch.py` drives the translation via
+the `xvi`/`pak`/`mink_info` ops. Self-tests: `--selftest <dir-of-.Xvi>`, `--selftest-pak <data.pak>`,
+`--selftest-mink '<glob-of-.mink>'` each prove encode∘decode == identity on the user's own originals.
+Only the `.mink` `a0`/`m0` **sprite** codec remains un-round-tripped (stored verbatim; carries no text).

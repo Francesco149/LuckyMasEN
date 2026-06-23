@@ -16,14 +16,21 @@ sygnas_unpack.pak_decompress): `pak_compress` + `repack_packdata` rebuild a `dat
 named members replaced (`.nut` re-compressed, PNGs stored verbatim). The encoder self-checks
 each blob by decoding it back before returning, so a corrupt member can never be written.
 
+And it encodes the `.mink` `info`-chunk codec (a *third* LZSS — MinkIt's own MSB-first bit
+codec; see sygnas_unpack.mink_info_decompress): `mink_info_compress` + `repack_mink` rebuild a
+`.mink` with the per-character Title=/Author=/… metadata replaced (a0/m0 sprite streams copied
+verbatim). Same self-verify-before-write guarantee.
+
 Usage:
   sygnas_repack.py <orig.Xvi> <new_ini.txt> <out.Xvi>   # rebuild one .Xvi with a new Ini (cp932 text in)
   sygnas_repack.py --selftest <dir-of-.Xvi>             # prove encode∘decode == identity on all originals
   sygnas_repack.py --selftest-pak <data.pak>            # prove the PACKDATA .nut encoder round-trips
+  sygnas_repack.py --selftest-mink '<glob-of-.mink>'    # prove the MINK info encoder round-trips
 """
 import os, sys, struct
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sygnas_unpack import lzss_decompress, pak_decompress, u32
+from sygnas_unpack import (lzss_decompress, pak_decompress, u32,
+                           mink_chunks, mink_info_decompress, _mink_decode)
 
 def lzss_compress(data, N=4096, F=18, THRESHOLD=2, init=0x20):
     win = bytearray([init]) * N
@@ -174,6 +181,89 @@ def repack_packdata(orig, overrides):
     return bytes(orig[:16]) + bytes(dirbuf) + bytes(databuf)
 
 
+# ── MINK (.mink) — the MinkIt mascot container ───────────────────────────────────
+def mink_info_compress(plain, MINMATCH=2, MAXMATCH=15, MAXDIST=255):
+    """Encoder for the `.mink` `info`-chunk LZSS (decode-compatible with
+    sygnas_unpack.mink_info_decompress). Writes an MSB-first bitstream of per-token control
+    bits — 0 = literal (8 bits), 1 = back-reference (8-bit distance back, 4-bit length) —
+    via a greedy longest-match in a 255-byte window (len 2..15, overlap/RLE allowed). The
+    stream is then padded with NUL-literals to a whole byte and capped with one extra,
+    never-read terminator byte, so the engine's source-EOF rule halts decoding exactly at
+    the text end (no trailing garbage). Returns the full `info` chunk
+    `[u32 len(plain)][bitstream][term]`. Self-verified before returning."""
+    bits = bytearray()
+    def put_bits(v, nb):
+        for k in range(nb - 1, -1, -1):
+            bits.append((v >> k) & 1)
+    n = len(plain); i = 0
+    while i < n:
+        best_len = best_dist = 0
+        maxl = min(MAXMATCH, n - i)
+        lo = max(0, i - MAXDIST)
+        for src in range(i - 1, lo - 1, -1):           # nearest first (smallest distance)
+            dist = i - src
+            l = 0
+            while l < maxl and plain[i + l - dist] == plain[i + l]:   # RLE-capable compare
+                l += 1
+            if l > best_len:
+                best_len, best_dist = l, dist
+                if l == maxl:
+                    break
+        if best_len >= MINMATCH:                        # back-reference token
+            put_bits(1, 1); put_bits(best_dist, 8); put_bits(best_len, 4)
+            i += best_len
+        else:                                           # literal token
+            put_bits(0, 1); put_bits(plain[i], 8)
+            i += 1
+    while len(bits) % 8 != 0:                           # pad to a byte: NUL-literals (9 bits each)
+        put_bits(0, 1); put_bits(0, 8)                  # decode to NUL -> NUL-terminates the scan
+    packed = bytes(int(''.join(map(str, bits[k:k+8])), 2) for k in range(0, len(bits), 8))
+    chunk = struct.pack('<I', n) + packed + b'\x00'     # +1 unread EOF terminator byte
+    assert mink_info_decompress(chunk) == plain and set(_mink_decode(chunk)[n:]) <= {0}, \
+        "mink info encoder/decoder mismatch — refusing to write a corrupt chunk"
+    return chunk
+
+def repack_mink(orig, new_info_bytes):
+    """Rebuild a MINK container, replacing the `info` chunk with a re-compressed
+    `new_info_bytes` (raw decoded cp932 text). a0/m0 are copied verbatim; the 16-byte-record
+    directory is rebuilt with corrected offsets/sizes (chunks stay contiguous after it)."""
+    ch = mink_chunks(orig)
+    order = sorted(ch, key=lambda nm: ch[nm][0])        # preserve on-disk chunk order
+    blobs = {nm: (mink_info_compress(new_info_bytes) if nm == 'info'
+                  else orig[ch[nm][0]:ch[nm][0] + ch[nm][1]]) for nm in order}
+    count = u32(orig, 8)
+    cur = 16 + count * 16                               # data starts right after the directory
+    dirbuf = bytearray(); databuf = bytearray()
+    for nm in order:
+        blob = blobs[nm]
+        dirbuf += nm.encode('latin1')[:8].ljust(8, b'\x00') + struct.pack('<II', cur, len(blob))
+        databuf += blob; cur += len(blob)
+    return bytes(orig[:16]) + bytes(dirbuf) + bytes(databuf)
+
+def get_mink_info(b):
+    off, size = mink_chunks(b)['info']
+    return mink_info_decompress(b[off:off+size])
+
+
+def selftest_mink(mink_glob):
+    import glob
+    ok = bad = 0
+    for f in sorted(glob.glob(mink_glob)):
+        b = open(f, 'rb').read()
+        info = get_mink_info(b)                          # decode original
+        rt = mink_info_decompress(mink_info_compress(info))   # encoder round-trips
+        rebuilt = get_mink_info(repack_mink(b, info))    # full container rebuild re-extracts it
+        good = (rt == info) and (rebuilt == info)
+        orig_sz = mink_chunks(b)['info'][1]
+        ours = len(mink_info_compress(info))
+        title = next((ln for ln in info.split(b'\r\n') if ln.startswith(b'Title=')), b'?')
+        print(f"  {'ok ' if good else 'FAIL'} {os.path.basename(f):<18} info={len(info):3d}b  "
+              f"ours={ours:3d}b  orig={orig_sz:3d}b  {title.decode('cp932', 'replace')}")
+        ok += good; bad += (not good)
+    print(f"\n{ok} ok, {bad} fail")
+    return bad == 0
+
+
 def selftest_pak(pak_path):
     b = open(pak_path, 'rb').read()
     ents, ds = packdata_entries(b)
@@ -219,6 +309,8 @@ def main(argv):
         return 0 if selftest(argv[1]) else 1
     if len(argv) == 2 and argv[0] == '--selftest-pak':
         return 0 if selftest_pak(argv[1]) else 1
+    if len(argv) == 2 and argv[0] == '--selftest-mink':
+        return 0 if selftest_mink(argv[1]) else 1
     if len(argv) == 3:
         orig = open(argv[0], 'rb').read()
         new_ini = open(argv[1], 'rb').read()

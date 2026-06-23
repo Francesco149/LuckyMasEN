@@ -120,10 +120,11 @@ strings = [
 
 # MinkIt.exe — the copy-animation engine front-end. It has NO RT_MENU: the tray menu is
 # AppendMenuA'd from these literals; the Setup "Event type" combo is filled from the 5
-# file-event labels; (無題)/(不明) are the Preview Title/Author defaults (the .mink `info`
-# chunk is a shared codec table, not per-file metadata — see mink-format.md — so the
-# Preview always shows these defaults). "設定(&S)..."(11B) can't fit "Settings(&S)..." →
-# "Options(&S)" keeps the mnemonic+style within budget.
+# file-event labels; (無題)/(不明) are the Preview Title/Author FALLBACK defaults — shown only
+# when a .mink's `info` chunk lacks that field. The `info` chunk IS per-character metadata
+# (Title=/Author=/…, its own LZSS — cracked, see mink-format.md); the real Title is rewritten to
+# ASCII by the [[mink_info]] op below, so the Preview/Settings list show "Konata" etc., not the
+# fallback. "設定(&S)..."(11B) can't fit "Settings(&S)..." → "Options(&S)" keeps the mnemonic+style.
 [[binpatch]]
 file = "app/copy/MinkIt.exe"
 encoding = "cp932"
@@ -152,6 +153,23 @@ encoding = "cp932"
 note = "MinkIt.dll — init-failure message (hardcoded SJIS)"
 strings = [
   { old = "初期化に失敗しました", new = "Failed to initialize" },           # (20B)
+]
+
+# .mink `info` chunks — per-character Title= (the MinkIt Settings list + Preview "Title:" text).
+# Decoded via the cracked info-chunk LZSS (mink-format.md), retitled to ASCII, re-compressed.
+# Runs on the JP filenames (content op precedes the .mink rename in OP_ORDER); matches by content,
+# so it covers each character's _copy + _dl pair. Author=SYGNAS / RefURL / Pattern / Interval are
+# already ASCII → untouched. Cross-over cast: Lucky☆Star (Konata/Kagami) × iDOLM@STER (Chihaya/Makoto/Yayoi).
+[[mink_info]]
+glob = "app/copy/*.mink"
+encoding = "cp932"
+note = "MinkIt .mink Title= -> ASCII (per-character info-chunk metadata)"
+subs = [
+  { old = "Title=こなた", new = "Title=Konata" },
+  { old = "Title=かがみ", new = "Title=Kagami" },
+  { old = "Title=千早",   new = "Title=Chihaya" },
+  { old = "Title=真",     new = "Title=Makoto" },
+  { old = "Title=やよい", new = "Title=Yayoi" },
 ]
 
 # Launch.exe — the mascot launcher. Drawn via DrawTextA/MessageBoxA. Includes the

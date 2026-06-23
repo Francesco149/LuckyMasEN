@@ -11,8 +11,10 @@ Compression: the launcher's ACZ text blob (the `Ini` chunk = the character's
 speech/dialogue) uses canonical **Okumura LZSS** (N=4096, F=18, THRESHOLD=2, ring
 pre-filled with 0x20, flag bit set = literal). The calc PACKDATA `.nut` (Squirrel
 source) blobs use a *different* LZSS (see `pak_decompress`) — also cracked, so they
-are emitted decoded. Only the `.mink` a0/m0 sprite streams use a still-unknown codec
-and are emitted raw, with a `.raw` suffix (they carry no text → don't gate the TL).
+are emitted decoded. The `.mink` `info` chunk (per-character Title=/Author=/… metadata)
+uses a **third** LZSS — MinkIt's own MSB-first bit codec (see `mink_info_decompress`),
+also cracked, so it is emitted as decoded cp932 text. Only the `.mink` a0/m0 sprite
+streams use a still-unknown codec and are emitted raw, with a `.raw` suffix.
 
 Stdlib only — runs anywhere (no flake needed). Reversible; reads originals, never writes them.
 
@@ -23,6 +25,16 @@ Usage:
 import os, sys, struct
 
 def u32(b, o): return struct.unpack_from('<I', b, o)[0]
+
+def mink_chunks(b):
+    """Return {chunk-name: (offset, size)} for a MINK container directory (info/a0/m0)."""
+    assert b[:4] == b'MINK', "not a MINK container"
+    d = {}
+    for k in range(u32(b, 8)):
+        o = 16 + k * 16
+        name = b[o:o+8].split(b'\x00')[0].decode('latin1')
+        d[name] = (u32(b, o+8), u32(b, o+12))
+    return d
 
 def sniff_ext(d):
     if d[:8] == b'\x89PNG\r\n\x1a\n': return '.png'
@@ -79,6 +91,58 @@ def pak_decompress(data, usize, WINDOW=4096):
                 out.append(out[src + k])
     return bytes(out)
 
+# ---- MINK (.mink) `info`-chunk LZSS — MinkIt's own per-character metadata codec --
+def _mink_decode(chunk):
+    """Faithful port of MinkIt.dll FUN_100023e0 (decoder) + FUN_10002350 (bit reader).
+    The `info` chunk is `[u32 decompressed_size][bitstream]`. Bits are read **MSB-first**
+    across byte boundaries; per token a control bit selects: 0 = literal (next 8 bits = one
+    byte), 1 = back-reference (8-bit distance back, then 4-bit length; copied byte-by-byte so
+    overlap/RLE is allowed). The engine stops on **source EOF** — its bit reader signals EOF
+    the moment it loads the final source byte, so that last byte is an unread terminator.
+    Returns the raw decoded stream (may include encoder NUL-padding past decompressed_size)."""
+    src = chunk; L = len(src)
+    st = {'pos': 4, 'buf': 0, 'cnt': 0xff}            # pos starts after the u32 size header
+    def get_bit():
+        if st['cnt'] == 0xff:                         # 0xff = "need to load the next byte"
+            st['buf'] = src[st['pos']]; st['pos'] += 1
+            if st['pos'] >= L:                        # EOF: the byte just loaded is discarded
+                return None
+            st['cnt'] = 7
+        c = st['cnt']; st['cnt'] = (c - 1) & 0xff     # 7..0 then wraps to 0xff -> reload
+        return (st['buf'] >> c) & 1
+    def get_bits(n):
+        v = 0
+        for _ in range(n):
+            b = get_bit()
+            if b is None:
+                return None
+            v = (v << 1) | b
+        return v
+    out = bytearray()
+    while True:
+        ctrl = get_bit()
+        if ctrl is None:
+            break
+        if ctrl == 0:                                 # literal: 8 data bits
+            v = get_bits(8)
+            if v is None:
+                break
+            out.append(v)
+        else:                                         # back-reference: 8-bit dist, 4-bit len
+            dist = get_bits(8); length = get_bits(4)
+            if dist is None or length is None:
+                break
+            start = len(out) - dist
+            for k in range(length):
+                out.append(out[start + k])
+    return bytes(out)
+
+def mink_info_decompress(chunk):
+    """Decode a MINK `info` chunk to its logical text (Title=/Author=/RefURL=/Pattern=/
+    Interval=, cp932), sliced to the stored decompressed_size. See `_mink_decode`."""
+    out_size = u32(chunk, 0)
+    return _mink_decode(chunk)[:out_size]
+
 
 # ---- container parsers: each yields (name, data, kind) --------------------------
 # kind: 'text' = decoded UTF-able config | 'asset' = ready file (PNG/…) | 'raw' = unknown codec
@@ -88,7 +152,11 @@ def parse_mink(b):
         o = 16 + k * 16
         name = b[o:o+8].split(b'\x00')[0].decode('latin1')
         off, size = u32(b, o+8), u32(b, o+12)
-        yield (name, b[off:off+size], 'raw')           # info/a0/m0 codec unknown -> raw
+        chunk = b[off:off+size]
+        if name == 'info':                             # per-character metadata (LZSS, cracked)
+            yield (name, mink_info_decompress(chunk), 'text')
+        else:
+            yield (name, chunk, 'raw')                 # a0/m0 sprite codec still unknown -> raw
 
 def parse_acz(b):
     assert b[:4] == b'ACZ\x00'

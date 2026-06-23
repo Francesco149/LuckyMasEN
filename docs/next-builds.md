@@ -602,3 +602,36 @@ The full method + boxes + boot ladder + the per-item overnight plan (deploy+veri
 item 2) live in the **private hardware repo** (see CLAUDE.md §"Deploy + test live on the XP box") —
 `projects/minkit-en-patch/{xp-ops-cheatsheet.md, OVERNIGHT-HANDOFF.md, deploy-xp.sh}`. Item 5's geometry
 fix + items 1/3/4 are committed here; the overnight session deploys the fresh build and confirms on XP.
+
+## ✅ Session 15 (2026-06-23) — OOB installer deploy; items 1/4/5 verified; item 2 DONE; cert prompt fixed
+Owner-supervised on **timemachine (XP, LCD, JP locale)**. Built a fresh EN installer (`make_iso.py --no-iso`
+→ `out/iss-build/setup.exe`, 48 MB; rebuilt patch + fresh gcalsrv + font) and installed it **OOB**
+(`setup.exe /VERYSILENT` via iexec) → `C:\Program Files\SYGNAS\LuckyMas\`. OOB config confirmed: Konata
+default, Calendar+Mail Boot=1, pre-seeded `gcal.ini`/`gcal.dat` + POP3 profile, cert [Run].
+- **Item 1 ✅** MinkIt Settings list shows **Konata/Kagami/Chihaya/Makoto/Yayoi** (+ all dialog chrome EN).
+- **Item 5 ✅** ABOUTDLG author URL/email render in full (no `…cafe.cor` clip). (owner-confirmed)
+- **Item 4 ✅** gcal month grid: today's 3 demo events on **separate rows** (Dentist/Lunch/Buy doujinshi);
+  day headers SUN–SAT. The launcher boot bubble also lists all 3 in EN. (owner-confirmed)
+- **Item 2 ✅ DONE** (the hard one). gcal.exe toolbar `更新/表示設定/動作設定` → **Refresh/View/Options**.
+  New **`asmpoke`** build_patch op (`tools/build_patch.py`): same-size verified byte `poke`s + UTF-16
+  `wstr` cave writes. In `FUN_004027c0` each button = `SetString(this,L"..",count)` + a hardcoded hit-rect
+  `{x,y,w,h}` at `[esi+0x20/0x30/0x40..]` + `TextOutW(x,6,..)`. The 3 wide literals (packed tight in
+  `.rdata` @0x44b298/2a0/2ac, no slack) are relocated to a cave @**VA 0x449858**, the `push offset`
+  repointed, and the counts + hit-rect x/w + TextOutW x immediates bumped (layout Refresh@8/View@0x3c/
+  Options@0x60; TextOutW x stays `push imm8` ≤0x7f). Owner clicked all 3 → correct actions. Commit `d7ef09f`.
+  ⚠️ **Cave lesson:** the zero-runs at the *very end* of `.text`/`.rdata` are **file-align slack PAST
+  VirtualSize → UNMAPPED at runtime**; writing there corrupted the adjacent import name `UnregisterClassA`
+  → `UnregisterClassAR` ("couldn't be located in USER32.dll" on launch). Use an *internal* zero gap **within**
+  the section VirtualSize (verify: zero + mapped + no DWORD in the file points into it).
+- **Cert prompt FIXED** (owner-flagged: install showed "delete a cert" then "install a cert"). Root cause:
+  the installer's `[Run] gcalsrv --install-cert` runs as the logged-in user, and the cert add went via the
+  SYSTEM store provider → XP's protected-root **modal** (×2 because `ADD_REPLACE_EXISTING` = delete+add).
+  Fix (`gcalsrv.c`): write to `HKLM\…\SystemCertificates\Root` via the **registry provider**
+  (`CERT_STORE_PROV_REG`) — no UI, still trusted. Verified on XP: reg key deleted → `--install-cert`
+  (interactive, via iexec) completes **silent**, recreates the cert blob, fresh gcal ClientLogin trusts it.
+  Commit `9dcf88d`.
+
+**Still deferred / next:** the toolbar EN labels are first-cut wording (Refresh/View/Options) + first-guess
+x/widths — fine on XP, tweak words/spacing if desired. To ship: rebuild the installer so the bundled
+`gcalsrv.exe` carries the silent-cert fix (CI/nightly does this). Held-back items unchanged (CreateFontA
+facenames, a0/m0 sprite codec). Translation surface remains COMPLETE + now includes the gcal toolbar.

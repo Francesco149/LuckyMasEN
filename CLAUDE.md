@@ -124,6 +124,24 @@ End goal = **English installer re-wrapped from the user's own `setup.exe`** (ISC
 (binpatch) + cert CN=localhost — drop the XP `hosts` line. The `.mink`/`.scr`/wallpaper-JPG renames are
 now ACTIVE; only the Launch.ini install-root path rewrite stays deferred (the installer pins `{app}` via `[INI]`).
 
+## The one-command end-user builder (`tools/make_iso.py`) — cross-platform self-service
+The packaged front-door: the user supplies only **their own disc `setup.exe`** + **their own MS PGothic**
+and gets `out/LuckyMas-EN.iso` (+ `.zip`). One shared Python engine runs everywhere; pipeline =
+`innoextract` (read the installed tree straight out of the user's setup.exe — no game install needed) →
+`build_patch.py` → `get_font.py` (`--font auto` finds it on Win/WSL) → `innounp -x -y -b -m` (the OG
+wizard art; `-y -b` or it hangs on the overwrite prompt under wine) → **ISCC** → ISO via **pycdlib else
+xorriso**. Platform-aware: ISCC + innounp run **native on Windows, under wine on Linux**. The freeware
+tools (Inno Setup 5.6.1, innounp 0.50, innoextract 1.9) are resolved explicit-flag → PATH/known-loc →
+cache → **pinned + SHA-256 auto-download** (`~/.cache/luckymasen`; pins in `make_iso.py` PINS).
+- **Front-doors** (owner chose per-OS native bundles): **Windows** = `installer/windows/build.bat`
+  (+`bootstrap_python.ps1`) — keeps a private embeddable Python so it ignores the Store-alias python stub,
+  runs ISCC **natively (no wine)**; the zip is assembled from Linux by **`tools/make_windows_bundle.sh`**
+  (toolchain + prebuilt `gcalsrv.exe` + a cache pre-seeded with the Windows tool builds → offline). **Linux**
+  = **`nix run .#iso`** (flake app `apps.iso`; local checkout or remote-staged from `${self}`; self-builds
+  `gcalsrv.exe` via build.sh if absent). **Validated end-to-end on real Win10 (native ISCC) + Linux** →
+  byte-valid 48 MB ISO. `gcalsrv.exe` is OUR redistributable artifact (ship prebuilt; no mingw for the user).
+  Output-on-Windows console must stay ASCII/encoding-safe (cp1252). Guide: `docs/end-user-build.md`.
+
 ## Conventions
 - Persist cross-session **orientation in this CLAUDE.md**; the running RE/build narrative in
   `docs/re-notes.md` + `docs/next-builds.md`. Windows-bound `.txt`/`.reg`/`.cmd` files = CRLF.

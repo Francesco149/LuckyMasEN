@@ -497,3 +497,27 @@ Owner-directed, after the translation: make the calendar/mail server a real, cus
 
 **Everything is built + committed. The remaining step is the on-XP test of the whole thing (translation +
 gcal-xp + installer) — the box is in NixOS.**
+
+## ✅ Session 12 (2026-06-23) — packaged the toolchain: one-command self-service ISO (Win + Linux)
+Owner-directed pivot: stop here on XP testing (already smoke-tested) and make it **easy for an end user to
+self-service an EN-patched ISO from their own disc, on Windows AND Linux with minimal friction**. Chosen
+shape (asked): **per-OS native bundles** over a shared engine, freeware tools **auto-downloaded pinned +
+sha256**. Detail in `CLAUDE.md` §"one-command end-user builder" + `docs/end-user-build.md`.
+
+- **`tools/make_iso.py`** — the shared cross-platform engine. `--setup <disc setup.exe> --font auto` →
+  `out/LuckyMas-EN.iso` (+`.zip`). innoextract (installed tree from setup.exe — one input file, no game
+  install) → build_patch → get_font → innounp wizard art → ISCC → ISO (pycdlib else xorriso). Native
+  ISCC/innounp on Windows, wine on Linux. Tool resolver: flag → PATH/known → cache → pinned download.
+- **Linux**: flake `apps.iso` (`nix run .#iso`), local-checkout or remote-staged from `${self}`; gcalsrv
+  self-builds via build.sh if missing. Added `xorriso`/`libarchive`/`curl` to the devshell.
+- **Windows**: `installer/windows/build.bat` (+`bootstrap_python.ps1`) — private embeddable Python (dodges
+  the Store-alias stub), **native ISCC, no wine**. `tools/make_windows_bundle.sh` assembles the zip from
+  Linux (toolchain + prebuilt gcalsrv.exe + cache pre-seeded with the Windows tool builds → offline).
+- **Validated for real**: full Linux run (byte-valid 48 MB ISO, embedded setup.exe sha == compiled) AND a
+  full native build on the **Windows 10 host via WSL interop** (bootstrap Python → native ISCC 16s → valid
+  48 MB ISO). Fixed: innounp overwrite-prompt hang (`-y -b`), cp1252 console crashes (ASCII/encoding-safe
+  logging in make_iso + get_font), `--font auto` on native Windows (`%WINDIR%\Fonts`).
+
+**Next (open):** a CI-built truly-zero-install Windows `.exe` (PyInstaller, no first-run Python fetch) as an
+optional release artifact; otherwise the self-service builder is done + validated on both OSes. The on-XP
+full-stack test (translation + gcal-xp + installer) remains the other open item from Session 11.

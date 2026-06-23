@@ -7,6 +7,7 @@ These are the strings NOT reachable as data (the launcher's right-click menus, t
 item menu, dialog captions/controls, string tables) — the deferred `pe-res` translation surface.
 
   dump <exe>            list every menu/dialog/string entry with a stable key + the JP text
+  geom <exe> [DLG...]   list RT_DIALOG control geometry (idx/class/x/y/cx/cy) for `[pe_res.layout]`
 
 Stable keys (used later by the patch map): MENU/<resid>/<lang>#<n>, STR/<id>, DLG/<resid>#<n>.
 Uses lief (in the flake). Run in `nix develop`.
@@ -153,6 +154,40 @@ def parse_dialog(data):
     except (struct.error, IndexError):
         pass
     return found
+
+
+_ATOM = {0x80: "Button", 0x81: "Edit", 0x82: "Static", 0x83: "ListBox",
+         0x84: "ScrollBar", 0x85: "ComboBox"}
+
+def dialog_controls(data):
+    """Yield each control's geometry as a dict {idx,class,text,x,y,cx,cy} for a DLGTEMPLATE[EX],
+    plus a leading {idx:'dialog'} row carrying the dialog cx/cy + caption. Read-only; used by the
+    `geom` CLI verb to pick control indices / current x,y,cx,cy for `[pe_res.layout.*]` overrides."""
+    ex = (_u16r(data, 0) == 1 and _u16r(data, 2) == 0xFFFF)
+    style = _u32(data, 12 if ex else 0)
+    cdit = _u16r(data, 16 if ex else 8)
+    yield {"idx": "dialog", "class": "", "x": _u16r(data, 18 if ex else 10),
+           "y": _u16r(data, 20 if ex else 12), "cx": _u16r(data, 22 if ex else 14),
+           "cy": _u16r(data, 24 if ex else 16), "text": ""}
+    o = 26 if ex else 18
+    o = _ord_or_sz(data, o)[2]                          # menu
+    o = _ord_or_sz(data, o)[2]                          # window class
+    _, o = _wsz(data, o)                                # caption
+    if style & 0x40:                                   # DS_SETFONT
+        o += 6 if ex else 2
+        _, o = _wsz(data, o)                            # typeface
+    for idx in range(cdit):
+        while o & 3:
+            o += 1
+        goff = 12 if ex else 8
+        x, y, cx, cy = struct.unpack_from("<hhhh", data, o + goff)
+        o += 24 if ex else 18
+        k, v, o = _ord_or_sz(data, o)                  # control class
+        cls = _ATOM.get(v, v) if k == "ord" else v
+        k2, v2, o = _ord_or_sz(data, o)                # control text
+        txt = v2 if k2 == "str" else "#%d" % v2
+        extra = _u16r(data, o); o += 2 + extra         # creation-data blob
+        yield {"idx": idx, "class": cls, "text": txt, "x": x, "y": y, "cx": cx, "cy": cy}
 
 
 def build_dialog(data, mapping, geom=None):
@@ -390,9 +425,39 @@ def dump(path):
                         print(f"{tag}#{n}\t{t!r}{mark}")
 
 
+def geom(path, names=None):
+    """Print RT_DIALOG control geometry (index/class/x/y/cx/cy/x+cx/text). `names` filters by
+    dialog resource id. Feeds the `[pe_res.layout.<DLG>]` overrides (keys = control index)."""
+    import lief
+    b = lief.parse(path)
+    if b is None or b.resources is None:
+        print("no resources"); return
+    for typ in b.resources.childs:
+        if typ.id != RT_DIALOG:
+            continue
+        for nm in typ.childs:
+            resid = nm.name if nm.has_name else nm.id
+            if names and str(resid) not in names:
+                continue
+            for lang in nm.childs:
+                try:
+                    ctrls = list(dialog_controls(bytes(lang.content)))
+                except (struct.error, IndexError) as e:
+                    print(f"DIALOG/{resid}: parse error: {e}"); continue
+                dlg = ctrls[0]
+                print(f"\n=== DIALOG/{resid}/lang{lang.id}  cx={dlg['cx']} cy={dlg['cy']} ===")
+                for c in ctrls[1:]:
+                    mark = " *JP*" if has_jp(c["text"]) else ""
+                    print(f"  #{c['idx']:<2} {str(c['class']):<8} "
+                          f"x={c['x']:<4} y={c['y']:<4} cx={c['cx']:<4} cy={c['cy']:<4} "
+                          f"x+cx={c['x']+c['cx']:<4} {c['text']!r}{mark}")
+
+
 def main(argv):
     if len(argv) == 2 and argv[0] == "dump":
         dump(argv[1]); return 0
+    if len(argv) >= 2 and argv[0] == "geom":
+        geom(argv[1], argv[2:] or None); return 0
     print(__doc__); return 2
 
 

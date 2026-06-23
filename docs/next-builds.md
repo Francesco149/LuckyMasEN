@@ -747,9 +747,21 @@ The Session-17 "JP-non-Unicode-locale" hypothesis is **disproven**. Full teardow
   previews in Display Properties AND runs fullscreen.
 
 ### ▶ Next: restore the working screensavers into the EN build (task #6)
-Owner reuploads the 4 apology installers to **archive.org** (the original site is gone) → pin URLs+sha256
-in `make_iso.py` (same auto-download pattern as IS/innounp) → RE exactly what each installer places
-(`.scr` + `saver.dat` + working-dir files + Flash 8 registration) → install that payload directly +
-reproducibly via the EN installer (**extract-and-merge**, not silently running the GUI installers).
-Never commit the SYGNAS files (download-at-build only). Deferred: a deep search for the apology release's
-provenance/history.
+**Source — archive.org (owner-uploaded 2026-06-24):** <https://archive.org/details/lucky-mas-screensavers>
+· direct DL: `https://archive.org/download/lucky-mas-screensavers/<file>`. Each zip holds one
+InstallShield-MSI `*_setup.exe` (the engine + a Flash-8 `CWS v8` movie + `flash8.ocx`). SHA-256 to pin
+(zip → its inner `*_setup.exe`):
+
+| zip | zip sha256 | inner setup.exe | setup.exe sha256 |
+|---|---|---|---|
+| `scr_chibi.zip` | `fda48017c68a9f70af63cff75a4692675753ebe75adb8d418395eb18ec51b4ab` | `chibi_setup.exe` | `9ec7cea2d9823ffcaa88746aaa5ca4a8924553074e839e3b5dee057cdd73b36b` |
+| `scr_imas3d.zip` | `b06f1742906d4750fa847c6489360dc470a463f6ae92c8fde4c070abfda99804` | `imas3d_setup.exe` | `f9bede370f43396e56963f07afb77220fa6efeef49dbbf8702fc88f903edce17` |
+| `scr_imas_comic.zip` | `4d1f55068a704f59968316848500cf96c769d60f6efcb6d8c42496c99d725df5` | `imas_comic_setup.exe` | `e8f15e5445c588fe3be41a340e7113889c34736d5ff2bc4656972015ce580bbb` |
+| `scr_lucky_comic.zip` | `ce6c23afd3461b97b4d6a884e0dad0bb6a996cdfb298617e96ac172858e8182c` | `luckystar_comic_setup.exe` | `b2b7f781ba7a03edad259a87c035e8e7ea8226fa99ae55ec338f239416570870` |
+
+Plan: pin these in `make_iso.py` (same auto-download pattern as IS/innounp) → RE exactly what each installer
+places (`.scr` + `saver.dat` + working-dir files + Flash 8 registration; start from `chibi_setup.exe`, the
+smallest — it's an InstallShield-MSI, GUI-driven with an overwrite + "open Display Properties" prompt) →
+install that payload directly + reproducibly via the EN installer (**extract-and-merge**, NOT silently
+running the GUI installers). Never commit the SYGNAS files (download-at-build only). The local copies are in
+`work/scr/gdrive/` (gitignored). Deferred: a deep search for the apology release's provenance/history.

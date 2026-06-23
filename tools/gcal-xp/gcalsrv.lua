@@ -122,24 +122,42 @@ local function norm_event(e, idx)
   return title, mins, where
 end
 
--- events for a given Y/M/D; ini `events=` overrides for all days (flat list)
-local function events_for(ini, y, m, d)
-  if ini.events then
-    local t = {}
-    for tok in (ini.events .. ";"):gmatch("(.-);") do
-      tok = tok:match("^%s*(.-)%s*$"); if tok ~= "" then t[#t + 1] = tok end
-    end
-    return t
-  end
-  return EVENTS[("%04d-%02d-%02d"):format(y, m, d)] or EVENTS["*"] or {}
+-- The launcher's day-bubble asks for one day (start-min..start-max = today..tomorrow); the gcal.exe
+-- month grid asks for a whole month (e.g. 06-01..07-01). We must place each event on its OWN date
+-- across that window -- NOT pile them all on start-min (that was the "everything on the 1st" bug).
+local function in_window(k, lo, hi)   -- [lo,hi) exclusive; nil hi, or a same-day range, = just `lo`
+  if hi and hi > lo then return k >= lo and k < hi else return k == lo end
 end
 
--- the day the launcher asks about: GData start-min if present, else "today"
-local function anchor_date(ini, query)
-  local y, m, d = (query or ""):match("start%-min=(%d%d%d%d)%-(%d%d)%-(%d%d)")
-  if y then return tonumber(y), tonumber(m), tonumber(d) end
-  local yy, mm, dd = today_str(ini):match("(%d+)-(%d+)-(%d+)")
-  return tonumber(yy), tonumber(mm), tonumber(dd)
+-- {date=YYYY-MM-DD, evs=list} groups to render for the requested window. Specific dates render on
+-- their own day; the ["*"] wildcard is the demo fallback and renders ONLY on "today" (so a month
+-- grid shows the demo events on the current day, not duplicated onto every day).
+local function collect_events(ini, query)
+  local q = query or ""
+  local lo = q:match("start%-min=(%d%d%d%d%-%d%d%-%d%d)") or today_str(ini)
+  local hi = q:match("start%-max=(%d%d%d%d%-%d%d%-%d%d)")        -- exclusive; nil = just `lo`
+  local today = today_str(ini)
+  local groups = {}
+  if ini.events then                                            -- test override: flat list on "today"
+    if in_window(today, lo, hi) then
+      local t = {}
+      for tok in (ini.events .. ";"):gmatch("(.-);") do
+        tok = tok:match("^%s*(.-)%s*$"); if tok ~= "" then t[#t + 1] = tok end
+      end
+      groups[#groups + 1] = { date = today, evs = t }
+    end
+    return groups
+  end
+  for k, evs in pairs(EVENTS) do
+    if k ~= "*" and k:match("^%d%d%d%d%-%d%d%-%d%d$") and in_window(k, lo, hi) then
+      groups[#groups + 1] = { date = k, evs = evs }
+    end
+  end
+  if EVENTS["*"] and not EVENTS[today] and in_window(today, lo, hi) then
+    groups[#groups + 1] = { date = today, evs = EVENTS["*"] }
+  end
+  table.sort(groups, function(a, b) return a.date < b.date end)
+  return groups
 end
 
 local function allcalendars(ini)
@@ -156,23 +174,27 @@ local function allcalendars(ini)
   return table.concat(out, "\n")
 end
 
--- an empty `evs` -> a feed with no <entry> -> the parser counts 0 -> None bubble
-local function events_feed(ini, y, m, d, evs)
+-- no groups -> a feed with no <entry> -> the parser counts 0 -> None bubble
+local function events_feed(ini, groups)
   local tz = ini.tzoffset or TZOFFSET
   local out = feed_head(ini.calname or CALNAME)
-  for i, e in ipairs(evs) do
-    local title, mins, where = norm_event(e, i)
-    local sh, sm = mins // 60, mins % 60
-    local eh, em = (mins + 60) // 60, (mins + 60) % 60
-    out[#out + 1] = "  <entry>"
-    out[#out + 1] = "    <title type='text'>" .. xesc(title) .. "</title>"
-    out[#out + 1] = "    <content type='text'>" .. xesc(title) .. "</content>"
-    out[#out + 1] = ("    <gd:when startTime='%04d-%02d-%02dT%02d:%02d:00.000%s' " ..
-                     "endTime='%04d-%02d-%02dT%02d:%02d:00.000%s'/>")
-                    :format(y, m, d, sh, sm, tz, y, m, d, eh, em, tz)
-    if where then out[#out + 1] = "    <gd:where valueString='" .. xesc(where) .. "'/>" end
-    out[#out + 1] = "    <gd:eventStatus value='http://schemas.google.com/g/2005#event.confirmed'/>"
-    out[#out + 1] = "  </entry>"
+  for _, g in ipairs(groups) do
+    local gy, gm, gd = g.date:match("(%d+)-(%d+)-(%d+)")
+    gy, gm, gd = tonumber(gy), tonumber(gm), tonumber(gd)
+    for i, e in ipairs(g.evs) do
+      local title, mins, where = norm_event(e, i)
+      local sh, sm = mins // 60, mins % 60
+      local eh, em = (mins + 60) // 60, (mins + 60) % 60
+      out[#out + 1] = "  <entry>"
+      out[#out + 1] = "    <title type='text'>" .. xesc(title) .. "</title>"
+      out[#out + 1] = "    <content type='text'>" .. xesc(title) .. "</content>"
+      out[#out + 1] = ("    <gd:when startTime='%04d-%02d-%02dT%02d:%02d:00.000%s' " ..
+                       "endTime='%04d-%02d-%02dT%02d:%02d:00.000%s'/>")
+                      :format(gy, gm, gd, sh, sm, tz, gy, gm, gd, eh, em, tz)
+      if where then out[#out + 1] = "    <gd:where valueString='" .. xesc(where) .. "'/>" end
+      out[#out + 1] = "    <gd:eventStatus value='http://schemas.google.com/g/2005#event.confirmed'/>"
+      out[#out + 1] = "  </entry>"
+    end
   end
   out[#out + 1] = "</feed>"; out[#out + 1] = ""
   return table.concat(out, "\n")
@@ -190,9 +212,8 @@ function http_handle(method, path, query, body)
     return 200, ATOM, allcalendars(ini)
   elseif method == "GET" and path:sub(1, 16) == "/calendar/feeds/" then
     if cal_err then return 403, "text/plain", "Forbidden\n" end
-    local y, m, d = anchor_date(ini, query)
-    local evs = (ini.calendar == "none") and {} or events_for(ini, y, m, d)
-    return 200, ATOM, events_feed(ini, y, m, d, evs)
+    local groups = (ini.calendar == "none") and {} or collect_events(ini, query)
+    return 200, ATOM, events_feed(ini, groups)
   elseif method == "GET" and path == "/calendar/event" then
     return 200, "text/html", "<html><body>gcal-xp: add-event template (no-op stub)</body></html>"
   end

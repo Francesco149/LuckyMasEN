@@ -8,13 +8,13 @@
 # keep the EXE importing ONLY XP system DLLs (the mcf threads code is dead-stripped —
 # we use native CreateThread). -no-pie = fixed base. -mwindows = no console window.
 set -euo pipefail
-here="$(cd "$(dirname "$0")" && pwd)"; cd "$here"
+here="$(cd "$(dirname "$0")" && pwd)"; self="$here/$(basename "$0")"; cd "$here"
 CC=i686-w64-mingw32-gcc
 AR=i686-w64-mingw32-ar
 
 # Bring the cross toolchain on PATH from nix if needed (works in `nix develop` / any box with nix).
 if ! command -v "$CC" >/dev/null 2>&1; then
-  exec nix shell nixpkgs#pkgsCross.mingw32.buildPackages.gcc --command bash "$0" "$@"
+  exec nix shell nixpkgs#pkgsCross.mingw32.buildPackages.gcc --command bash "$self" "$@"
 fi
 
 # --- embedded assets ---

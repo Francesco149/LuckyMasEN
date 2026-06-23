@@ -478,9 +478,15 @@ done" but never cleanly proven on the box.
      **Decorative serif tics → `~`** (in `build_launcher_en.py`; the bubbles carry only decorative stars, no
      names → `Kyaan~`, `out~`). Filenames stay `*`-free (`*` is illegal in Windows paths → the deferred
      `.scr` rename target uses "Lucky Star"; display name will use `*` at the future `.scr` pe_res stage).
-- **Known issue — deferred to post-translation polish (owner-flagged, pre-existing in the JP build):** a
-  spurious **empty app-launcher menu** sometimes appears on left-click of the launcher. NOT a TL regression;
-  investigate as extra polish after the translation + installer work.
+- **SOLVED (owner, 2026-06-23) — the "empty app-launcher menu" was never a bug.** `Launch.exe`'s treasure
+  chest has **two click regions** that open **two independent app menus**: the **left** part opens menu 0
+  (slots saved as `Exec0XX`/`Title0XX` in `Launch.ini`, e.g. `Exec000`..`Exec009`), the **right** part
+  opens menu 1 (`Exec1XX`/`Title1XX`, e.g. `Exec108`/`Title108` = the 2nd-bottom-right slot — same slot
+  index `08` as the left menu's `Exec008`). The slot key is `Exec<menu><slot>`: menu digit 0=left / 1=right,
+  slot `00`-`09` = grid position. The installer pre-seeds only the **left** menu (`Exec000`-`004`,`009`), so
+  the **right** menu is **empty out of the box** — that empty menu is what looked "spurious." Everything is
+  functional (the right menu is just user-customisable space; add `Exec1XX`/`Title1XX` to populate it). NOT
+  a TL regression and not pre-existing breakage — by design.
 - Note: on the test box the right-click "Lucky*Star Calculator" still showed "Lucky Star" because
   `C:\lm\Launch.ini` is the hand-written test INI (kept for its `[Data]`/`[Calendar]` config), not the
   patched one — the shipping `out/patched/Launch.ini` carries the `*`. Correct in the build.

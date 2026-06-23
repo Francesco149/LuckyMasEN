@@ -440,6 +440,7 @@ Detail → [`re-notes.md`](re-notes.md) §"Session 11"; format → [`mink-format
 fine when PGothic present → the installer bundles it), MFC/VERSIONINFO boilerplate, the textless `.mink`
 sprite codec. **Open**: live-on-XP render check of the translated calc (box was in NixOS this session);
 the deferred wallpaper-JPG renames + `.scr` display-name pe_res; the spurious empty left-click menu (pre-existing).
+(The "empty menu" was later SOLVED — it's the chest's second app menu (right region = `Exec1XX`), empty OOB; see `re-notes.md`.)
 
 ### Session 11 (cont.) — the remainder: wallpaper + screensavers + header art (translation COMPLETE)
 Owner-directed "finish the remainder, then test." All the deferred non-binary surface is now done:
@@ -635,3 +636,21 @@ default, Calendar+Mail Boot=1, pre-seeded `gcal.ini`/`gcal.dat` + POP3 profile, 
 x/widths — fine on XP, tweak words/spacing if desired. To ship: rebuild the installer so the bundled
 `gcalsrv.exe` carries the silent-cert fix (CI/nightly does this). Held-back items unchanged (CreateFontA
 facenames, a0/m0 sprite codec). Translation surface remains COMPLETE + now includes the gcal toolbar.
+
+## ✅ Session 16 (2026-06-23) — q9650 hero-pics deploy; MinkIt URL clip ROOT-CAUSED; menu mystery solved
+Owner ran the fresh installer interactively on **q9650 (EN)** for hero shots; surfaced the MinkIt URL clip
+on the EN box. Also retired the legacy `xphttpd` autostart on timemachine (`zz-xphttpd.cmd` → `.disabled`).
+- **MinkIt About/Preview URL clip — REAL fix** (commit `3d7764d`). NOT a font/dialog-width problem (MS
+  PGothic 9pt is bundled+installed on both boxes). `Launch`-side dead end: widening the dialog only stretched
+  the frame, URLs stayed clipped with empty space. RE'd it: **`MinkIt.exe FUN_004010b0`** makes the URL
+  controls blue hyperlinks by measuring the text (`GetTextExtentPoint32A`) and `SetWindowPos`-ing each to
+  EXACTLY that width (`uFlags=6`, resize-only) — the control's margin clips ~2-4px AND this runtime resize
+  OVERRIDES the dialog-template `cx` (so `[pe_res.layout]` cx alone never worked). Fix: 1-byte `asmpoke` adds
+  `SWP_NOSIZE` (`uFlags 6->7` @VA 0x40115c) → control keeps its template width; `[pe_res.layout]` cx then
+  holds (ABOUTDLG x=27 cx=95, PREVIEWDLG URL x=40 cx=140). Verified on q9650 + timemachine: full URLs.
+  ⚠️ **Lesson:** a control that resizes itself at runtime makes the `pe_res` template geometry a no-op — check
+  for runtime `SetWindowPos`/`MoveWindow` before chasing template rects.
+- **Calendar-on-boot defaults OFF** (commit `195fa25`) so the mail bubble greets on first boot.
+- **"Empty app menu" mystery SOLVED** (owner): the chest has two click regions → two app menus — left =
+  `Exec0XX`, right = `Exec1XX` (`Exec<menu><slot>`); the right menu is empty OOB (installer seeds only the
+  left). By design, fully functional. See `re-notes.md`.

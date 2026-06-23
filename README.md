@@ -77,6 +77,10 @@ You own the disc; this turns it into an **English** one. Give it your disc's `se
 copy of MS PGothic — out comes `LuckyMas-EN.iso` (a drop-in English disc image) and a `LuckyMas-EN.zip`.
 Nothing here redistributes a SYGNAS or Microsoft file. **Full guide: [docs/end-user-build.md](docs/end-user-build.md).**
 
+📀 **Check you have the supported disc first:** **[docs/source-disc.md](docs/source-disc.md)** — the
+disc/`setup.exe` + per-file checksums, versions and metadata the patch is built against (and a
+preservation record for this out-of-print 2007 disc).
+
 ```sh
 # Windows — unzip LuckyMasEN-builder-win.zip, then (runs Inno Setup natively, no wine):
 build.bat --setup D:\setup.exe --font auto
@@ -108,6 +112,7 @@ correctly even on an XP with no East-Asian language pack.
 | [`docs/mink-format.md`](docs/mink-format.md) | the reverse-engineered SYGNAS container formats — `MINK` · `ACZ` (.Xvi) · `PACKDATA` (.pak) |
 | [`docs/re-notes.md`](docs/re-notes.md) | the full running RE log (binaries, codecs, the Google/TLS protocol, the translation passes) |
 | [`docs/end-user-build.md`](docs/end-user-build.md) | the self-service build guide (Windows + Linux) |
+| [`docs/source-disc.md`](docs/source-disc.md) | the source disc's identity, versions + per-file checksums (verify the supported version; preservation record) |
 | [`tools/gcal-xp/`](tools/gcal-xp/README.md) | the native XP-local fake-Google calendar/mail server |
 
 ## Hard rule: no redistribution of original files

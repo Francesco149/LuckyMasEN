@@ -74,14 +74,35 @@ imas3d ≈ 14.5 MB) + **`flash8.ocx`** (Flash Player 8 ActiveX). The disc bundle
 **Verified live:** installing `chibi_setup.exe` over the broken stub → the chibi screensaver previews in
 Display Properties **and** runs fullscreen (iM@S/Lucky☆Star chibis on coloured stripes).
 
-## Restoring them (planned)
+## Restoring them — DONE (`tools/screensaver_restore.py`)
 
-The screensavers can be made to work in the EN build by sourcing SYGNAS's apology installers (the originals
-were never on the disc, so they must come from outside): reupload the four to **archive.org**, pin their
-URLs + SHA-256 in the builder (same auto-download pattern as the Inno Setup / innounp tools), and
-**extract-and-merge** their payload (`.scr` + `saver.dat` + working-dir files + Flash 8) into the EN
-installer reproducibly — *not* by silently running the GUI installers. The SYGNAS files are never committed
-(download-at-build only), consistent with the project's hard rule. Tracked in
+The EN build now restores the working screensavers by extract-and-merge from SYGNAS's apology installers
+(the content was never on the disc, so it comes from outside): the four are pinned on **archive.org**
+(`archive.org/details/lucky-mas-screensavers`) by SHA-256 (zip + inner `setup.exe`), downloaded at build,
+**never committed** (the hard rule). What we learned tearing the installers apart (full RE: an
+InstallShield-MSI wrapping `[IS stub | Flash-8 MSI | tail payload]`; the InstallScript front-end, not the
+`/s` flags, drove the GUI, so the silent attempt still popped a wizard — driven headless on Xvfb to capture
+ground truth):
+
+- **The engine `.scr` is byte-identical to the disc's** (sha `6b430059…`, 203264 B, one binary × 4 names).
+  So the patch *already ships the working engine* — restore adds only the missing content.
+- A working install = `{sys}\<Name>.scr` **+** `{sys}\<Name> dir\` holding `saver.dat` (a 1240-B
+  descriptor), the Flash movie, `saver1.dll`/`saver2.dll`, and `expire.scf`/`prevmon.scf`/`setwnd.scf`
+  (FWS/BMP assets) **+** `{sys}\Macromed\Flash\Flash8.ocx` (registered). The engine derives its working
+  dir as **`<own-.scr-basename> dir`** (proven live: renaming the `.scr`+dir to English Just Works).
+- `saver.dat`'s 6 install-time bytes at 388..397 are runtime state — zero is fine (proven). `saver.dat`
+  names the movie in a NUL-terminated field at **offset 312**, opened via the ANSI API → a cp932 name
+  fails on EN-locale XP, so we rename the movie to `saver.swf` and rewrite that field ASCII (goal #2).
+- Every payload file sits **verbatim and contiguous** in the apology installer → carved by (offset,size),
+  each SHA-256-verified (the parent installer is itself pinned — same idea as the `asmpoke` ops).
+  `Flash8.ocx` is **LZX**-compressed in the MSI's `Data1.cab`, itself an OLE-compound-document *stream*
+  (fragmented across FAT sectors) → reassembled with a minimal pure-Python CFB reader, then unpacked with
+  `cabextract`/`7z`/Windows `expand`.
+
+`make_iso.py` runs the restore after the patch (non-fatal; `--skip-screensavers` to opt out); `setup.iss`
+ships the working dirs + Flash and `regsvr32`-registers the OCX (both `#if FileExists`-guarded). **Validated
+end-to-end under wine** (built EN installer → silent install → all four run fullscreen from `{sys}`). RE
+tooling + the per-installer extraction table: `tools/screensaver_restore.py`; session log in
 [`next-builds.md`](next-builds.md) §"Session 18".
 
 ## Ops note (gotcha)

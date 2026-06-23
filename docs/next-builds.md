@@ -746,7 +746,7 @@ The Session-17 "JP-non-Unicode-locale" hypothesis is **disproven**. Full teardow
   **Verified live:** installing `chibi_setup.exe` over the stub on timemachine → the chibi screensaver
   previews in Display Properties AND runs fullscreen.
 
-### ▶ Next: restore the working screensavers into the EN build (task #6)
+### ✅ DONE: working screensavers restored into the EN build (task #6) — `tools/screensaver_restore.py`
 **Source — archive.org (owner-uploaded 2026-06-24):** <https://archive.org/details/lucky-mas-screensavers>
 · direct DL: `https://archive.org/download/lucky-mas-screensavers/<file>`. Each zip holds one
 InstallShield-MSI `*_setup.exe` (the engine + a Flash-8 `CWS v8` movie + `flash8.ocx`). SHA-256 to pin
@@ -759,9 +759,26 @@ InstallShield-MSI `*_setup.exe` (the engine + a Flash-8 `CWS v8` movie + `flash8
 | `scr_imas_comic.zip` | `4d1f55068a704f59968316848500cf96c769d60f6efcb6d8c42496c99d725df5` | `imas_comic_setup.exe` | `e8f15e5445c588fe3be41a340e7113889c34736d5ff2bc4656972015ce580bbb` |
 | `scr_lucky_comic.zip` | `ce6c23afd3461b97b4d6a884e0dad0bb6a996cdfb298617e96ac172858e8182c` | `luckystar_comic_setup.exe` | `b2b7f781ba7a03edad259a87c035e8e7ea8226fa99ae55ec338f239416570870` |
 
-Plan: pin these in `make_iso.py` (same auto-download pattern as IS/innounp) → RE exactly what each installer
-places (`.scr` + `saver.dat` + working-dir files + Flash 8 registration; start from `chibi_setup.exe`, the
-smallest — it's an InstallShield-MSI, GUI-driven with an overwrite + "open Display Properties" prompt) →
-install that payload directly + reproducibly via the EN installer (**extract-and-merge**, NOT silently
-running the GUI installers). Never commit the SYGNAS files (download-at-build only). The local copies are in
-`work/scr/gdrive/` (gitignored). Deferred: a deep search for the apology release's provenance/history.
+**Implemented + validated (2026-06-24).** Full RE of the installers + the extract-and-merge build is in
+`tools/screensaver_restore.py` (+ teardown in [`screensaver-re.md`](screensaver-re.md)). Key facts:
+
+- Each `*_setup.exe` is an **InstallShield-MSI** = `[IS stub | Flash-8 MSI | tail payload]`. The
+  InstallScript front-end (not the `/s /v"/qn"` flags) drives the GUI, so silent install still pops a
+  wizard — I drove it **headless on Xvfb** to get ground truth (one Install click → files in `{sys}`).
+- The engine `.scr` is **byte-identical to the disc's** (sha `6b430059…`) — already shipped. Restore adds
+  only `{sys}\<EN-name> dir\` (`saver.dat` + the movie + `saver1/2.dll` + `expire/prevmon/setwnd.scf`) and
+  `{sys}\Macromed\Flash\Flash8.ocx`. Working dir = **`<.scr-basename> dir`** (engine derives it from its
+  own filename → renaming the `.scr`+dir to English works; proven live).
+- **Locale (goal #2):** the movie (cp932 name) → `saver.swf`; `saver.dat`'s NUL-terminated swf-name field
+  at **offset 312** rewritten ASCII (engine opens it via the ANSI API → cp932 fails on EN XP). The 6
+  install-time bytes at `saver.dat` 388..397 are runtime state — zeros work.
+- **Extraction:** every payload file is verbatim+contiguous in the installer → carved by (offset,size),
+  SHA-256-verified (installer itself pinned). `Flash8.ocx` is **LZX** inside the MSI's `Data1.cab` — a
+  fragmented **OLE-compound-doc stream** → reassembled with a tiny pure-Python CFB reader, unpacked with
+  `cabextract`/`7z`/`expand`.
+- **Wiring:** `make_iso.py` → `stage_screensavers` (after patch; non-fatal; `--skip-screensavers`);
+  `setup.iss` recurses `sys\*` and `regsvr32`-registers the OCX (`#if FileExists`-guarded). **Validated
+  e2e under wine**: built EN installer → silent install → all four run fullscreen from `{sys}`; ISCC
+  clean (≈70 MB setup). Pending (gold standard): a live XP smoke-test (Display-Properties picker +
+  preview). SYGNAS files never committed (download-at-build; local copies in `work/scr/gdrive/`,
+  gitignored). Deferred: a deep search for the apology release's provenance/history.

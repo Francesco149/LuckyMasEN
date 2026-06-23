@@ -96,10 +96,12 @@ bulk-renames files by a substring map + rewrites refs in lockstep. **The transla
 all PE-resource UI, all hardcoded/runtime JP, gcal.exe's 3 custom-drawn toolbar buttons (更新/表示設定/動作設定 →
 Refresh/View/Options via `asmpoke`), the themed calculators (`calmain.nut` + button PNGs), the
 wallpaper picker (84 JPGs + HTML refs ASCII'd; 壁紙の設定方法/壁紙一覧/モニターサイズ header images retexted),
-the 4 screensaver filenames (the rename only relabels them — ⚠️ the `.scr` themselves are **broken
-ScreenTime-for-Flash engine stubs**: the disc shipped them WITHOUT their `saver.dat` content package, so
-they don't run on ANY locale — a SYGNAS defect, NOT a locale/our-patch issue; SYGNAS's separate "apology"
-release has the working ones — see `docs/screensaver-re.md` + the restore plan in `docs/next-builds.md`),
+the 4 screensaver filenames (the rename relabels the engine `.scr`; the disc shipped them as **gutted
+ScreenTime-for-Flash engine stubs** WITHOUT their content — a SYGNAS defect, not locale/our-patch — but the
+EN build now **RESTORES** the working ones: `tools/screensaver_restore.py` extract-and-merges the missing
+per-saver content + Flash 8 from SYGNAS's apology installers (SHA-256-pinned on archive.org, downloaded at
+build, never committed) into `{sys}\<EN-name> dir\` next to our byte-identical `.scr`; see
+`docs/screensaver-re.md`),
 and the 5 MinkIt mascot Titles (Konata/
 Kagami/Chihaya/Makoto/Yayoi) are EN. Held back (recorded, non-text): the `CreateFontA` facenames
 (`ＭＳ Ｐゴシック`; fine when PGothic present — the installer bundles it), MFC/VERSIONINFO boilerplate, and
@@ -114,7 +116,9 @@ now ACTIVE; only the Launch.ini install-root path rewrite stays deferred (the in
 The packaged front-door: the user supplies only **their own disc `setup.exe`** + **their own MS PGothic**
 and gets `out/LuckyMas-EN.iso` (+ `.zip`). One shared Python engine runs everywhere; pipeline =
 `innoextract` (read the installed tree straight out of the user's setup.exe — no game install needed) →
-`build_patch.py` → `get_font.py` (`--font auto` finds it on Win/WSL) → `innounp -x -y -b -m` (the OG
+`build_patch.py` → `screensaver_restore.py` (download+extract the 4 apology installers' working content +
+Flash 8 into `out/patched/sys`; `--skip-screensavers` to opt out) →
+`get_font.py` (`--font auto` finds it on Win/WSL) → `innounp -x -y -b -m` (the OG
 wizard art; `-y -b` or it hangs on the overwrite prompt under wine) → **ISCC** → ISO via **pycdlib else
 xorriso**. Platform-aware: ISCC + innounp run **native on Windows, under wine on Linux**. The freeware
 tools (Inno Setup 5.6.1, innounp 0.50, innoextract 1.9) are resolved explicit-flag → PATH/known-loc →

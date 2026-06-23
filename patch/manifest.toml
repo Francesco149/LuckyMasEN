@@ -215,6 +215,8 @@ strings = [
   { old = "カレンダーを取得しています", new = "Loading..." },                 # fetch status (13 ch)
   { old = "予定を取得しています", new = "Loading..." },                       # fetch status (10 ch)
   { old = "他 %d 件", new = " +%d" },                                       # "+N more" count (6 ch)
+  { old = "%4d年%2d月", new = "%4d-%02d" },                                 # calendar title Y/M (8 ch)
+  { old = "%4d年%2d月%2d日(%s)", new = "%4d-%2d-%2d(%s)" },                 # full date + weekday (16 ch)
   { old = "表示するカレンダーを選択してください", new = "Select a calendar." }, # prompt (18 ch)
   { old = "gcalcore.dll のパス情報が取得できませんでした。", new = "Can't get gcalcore.dll path." },
   { old = "認証エラーが発生しました。\n\nResult Code : %d\n", new = "Auth error.\n\nResult Code : %d\n" },

@@ -142,6 +142,14 @@ Filename: "{app}\launcher\Launch.ini"; Section: "Data"; Key: "Chara"; String: "k
 Filename: "{app}\launcher\Launch.ini"; Section: "Calendar"; Key: "Boot"; String: "1"
 ; The "you've got mail" bubble opens this email client (Outlook Express ships on every XP).
 Filename: "{app}\launcher\Launch.ini"; Section: "Mail"; Key: "Client"; String: "{pf}\Outlook Express\msimn.exe"
+; A POP3 profile (#1) pointed at the local gcal-xp server so the mail bubble works OOB. The server
+; accepts any credentials, so the captured obfuscated Pass1 (any login) is fine + not machine-bound.
+Filename: "{app}\launcher\Launch.ini"; Section: "Mail"; Key: "Boot"; String: "1"
+Filename: "{app}\launcher\Launch.ini"; Section: "Mail"; Key: "Set1"; String: "Lucky Mas"
+Filename: "{app}\launcher\Launch.ini"; Section: "Mail"; Key: "PopServer1"; String: "localhost"
+Filename: "{app}\launcher\Launch.ini"; Section: "Mail"; Key: "PopPort1"; String: "110"
+Filename: "{app}\launcher\Launch.ini"; Section: "Mail"; Key: "User1"; String: "you@lucky.example"
+Filename: "{app}\launcher\Launch.ini"; Section: "Mail"; Key: "Pass1"; String: "90iA*AiAiA[AhAhA"
 Filename: "{app}\launcher\Launch.ini"; Section: "Launch"; Key: "Exec000"; String: "{app}\calc\WinCalcImas.exe"
 Filename: "{app}\launcher\Launch.ini"; Section: "Launch"; Key: "Exec001"; String: "{app}\calc\WinCalcLucky.exe"
 Filename: "{app}\launcher\Launch.ini"; Section: "Launch"; Key: "Exec002"; String: "{app}\launcher\gcal.exe"

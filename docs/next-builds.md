@@ -654,3 +654,69 @@ on the EN box. Also retired the legacy `xphttpd` autostart on timemachine (`zz-x
 - **"Empty app menu" mystery SOLVED** (owner): the chest has two click regions → two app menus — left =
   `Exec0XX`, right = `Exec1XX` (`Exec<menu><slot>`); the right menu is empty OOB (installer seeds only the
   left). By design, fully functional. See `re-notes.md`.
+
+## ⚠️ Session 17 (HANDOFF) — screensavers error on non-JP-locale XP (investigate autonomously)
+
+The four screensavers do **not** work on the EN-locale **q9650**: selecting any in Display Properties
+shows the JP error **「スクリーンセーバーを完全に削除するには再起動してください」** ("to completely remove
+the screensaver, restart") in the preview pane, and **Preview** does nothing. Confirmed for BOTH the
+EN-renamed `.scr` **and** the original JP-named `.scr` (staged for the test), and it persists across a
+reboot. ⚠️ The earlier "screensavers translated/functional" claim (README, `source-disc.md`, `CLAUDE.md`)
+was **never tested on XP** and is at least partly wrong — correct it once this is settled.
+
+### What we know (the binary)
+- `sys/*.scr` is **one binary under four filenames** — byte-identical (SHA-256 `6b4300590412…`, 203,264 B
+  installed / 198 KiB on disc), **compiled 2006-08-11** (predates the disc; a reused screensaver engine).
+- **ASPack-packed** (`.aspack` + `.adata` sections, non-exec `.text`) → real imports + logic are hidden
+  until runtime; **static RE can't see the dispatch** without unpacking.
+- Four identical files show DIFFERENT content (iM@S 3D / iM@S Comic / Lucky☆Star Comic / Chibi) ⇒ the
+  binary **dispatches on its own filename** (`GetModuleFileName…`) to choose the embedded animation.
+  Originals: `らき☆マス：アイマス3D.scr` … ; our rename (`rename_map` op): `LuckyMas - iM@S 3D.scr` …
+- Nothing else references them (no exe/dll/ini/html mentions `.scr`); installed to `{sys}` (system32),
+  picked via Control Panel ▸ Display ▸ Screen Saver (per the disc readme). See `source-disc.md`.
+
+### Leading hypothesis
+A 2006 JP app most likely reads its filename with the **ANSI** API (`GetModuleFileNameA`), which returns
+it in the system **non-Unicode codepage**. On **JP-locale** XP that's cp932 → the JP filename round-trips
+→ dispatch matches → works. On **EN-locale** XP (q9650, and most users) cp1252 can't represent the JP
+name → garbled → no match → error path. The EN rename fails independently (its name isn't in the binary's
+table). So the screensavers may be **JP-system-locale-bound** — a limitation of the original engine, not
+just our rename. Not yet proven (q9650 has never been JP-locale).
+
+### Experiments (autonomous; XP ops in `../retro-hardware/projects/minkit-en-patch/xp-ops-cheatsheet.md`)
+Staged on **q9650 `system32`**: the 4 EN `.scr` + the test `らき☆マス：アイマス3D.scr`. The JP-locale box is
+**timemachine** (offline at handoff — `wakeonlan 74:d4:35:ea:6d:f2`, then arm an XP one-shot per the boot
+ladder; it floats .113/.114/.115). **Screenshot gotcha:** a running `/s` screensaver is a normal fullscreen
+window, so `nircmd savescreenshotfull` (BitBlt) captures it on an LCD box (no input → won't dismiss);
+**do NOT** PrtScn-keystroke (any key/mouse dismisses a screensaver). Easier + matches the report: open
+Display Properties, select the `.scr`, and PrtScn→clipboard the **preview pane** (a child window — nothing
+to dismiss). Run a `.scr` directly with `… "<path>\X.scr" /s` via iexec.
+
+1. **JP-named `.scr` on JP-locale timemachine** — if it shows the iM@S 3D animation, the engine works
+   there ⇒ the failure is locale/name-bound, not a missing dependency.
+2. **EN-named `.scr` on JP-locale timemachine** — isolates rename vs locale:
+   - works ⇒ the EN rename is FINE; the sole issue is the **EN system locale** → keep the rename, document
+     the JP-non-Unicode-locale requirement.
+   - errors ⇒ the EN name also fails on JP locale (binary only knows the JP names) → reverting the rename
+     is required for it to work at all.
+3. **q9650 (EN) with "Language for non-Unicode programs" = Japanese** (Control Panel ▸ Regional and
+   Language ▸ Advanced, + reboot) → test the JP-named `.scr` → if it then works, that's the user-facing
+   **workaround** (document it; it doesn't need full JP UI locale, just the system codepage).
+4. **Unpack the ASPack `.scr`** (aspackdie or a manual OEP-dump under wine; UPX tools won't work) → RE the
+   filename→content dispatch + the error path (find `GetModuleFileNameA/W`, the JP-name table, the
+   `再起動してください` string). Reveals whether a **binary patch** can make the EN names work on ANY locale
+   (best outcome) — e.g., repoint the name table to the EN names or force Unicode/locale-independent matching.
+
+### Decision tree (from the results)
+- **Best** — unpacking yields a clean patch ⇒ patch so the EN names work on any locale (likely a new
+  `asmpoke`/binpatch op). Functional **and** English. ⚠️ never `lief.write`; ASPack-repack only if needed.
+- **JP-name works on JP-locale only** ⇒ revert the `.scr` `rename_map` (currently ACTIVE) so they work on
+  JP-locale XP with the original names; document the JP-locale requirement.
+- **Non-Unicode-locale=JP workaround works on EN XP** ⇒ keep the EN rename, document the workaround.
+- **Worst case** ⇒ document as a known limitation (JP-locale-only); soften the README/source-disc claims.
+
+### Docs to correct once resolved
+- `README.md` — the 🌙 Screensavers row + the "everything is English / runs on real XP" framing.
+- `docs/source-disc.md` §"Screensavers — one binary, four names" — the "selected/functional via Display
+  Properties" line (add the on-EN-locale error + the resolution).
+- `CLAUDE.md` — the "translation surface COMPLETE … the 4 screensaver filenames … are EN" line.

@@ -94,6 +94,13 @@ subsystem enumerates them, and the disc's readme directs the user to **Control P
 Saver**. The launcher's only related item is a generic Display-Properties shortcut (`Exec009 =
 {sys}\desk.cpl`) — the same applet — never a specific `.scr`.
 
+> ⚠️ **Known issue (under investigation):** on a **non-Japanese-locale** XP the screensavers show the JP
+> error 「スクリーンセーバーを完全に削除するには再起動してください」 instead of running. The 2006
+> ASPack-packed engine picks its animation by reading its **own filename** in the system's legacy
+> codepage, which can't represent the name on a non-JP locale (and the English rename isn't in its table).
+> Whether it's fixable on an EN-locale box (rename revert · `Language for non-Unicode programs = Japanese`
+> · binary patch) is being investigated — see [`next-builds.md`](next-builds.md) §"Session 17".
+
 ### Full file manifest (SHA-256)
 
 Paths are relative to the install root. To check your own extracted/installed tree, save this block

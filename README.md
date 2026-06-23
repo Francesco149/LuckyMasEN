@@ -48,18 +48,21 @@ discover it. Thank you for making something with so much soul.
 
 ---
 
-## What's on the disc (everything is now English)
+## What's on the disc — and how to use it
 
-| What | The original | What this project did | Details |
-|---|---|---|---|
-| 🧍 **Desktop mascots — "Copy Animation"** | Per-pixel-alpha characters (Konata, Kagami, Chihaya, Makoto, Yayoi) that animate on your desktop, driven by the in-house **MinkIt** engine (`MinkIt.exe` + `.mink` containers) | Reverse-engineered the **MinkIt / `.mink`** container format; UI + paths Englished | [mink-format.md](docs/mink-format.md) |
-| 🗨️ **The launcher** | A desktop mascot (22 characters incl. Hiyori, Miyuki, Tsukasa…) with a right-click menu and **speech bubbles** (`.Xvi` serif data, Okumura-LZSS) | All 22 names + ~220 dialogue lines translated; menus, tooltips & dialogs Englished | [patch-system.md](docs/patch-system.md) · [re-notes.md](docs/re-notes.md) |
-| 📅 **The talking calendar** | A mascot that logs into **Google Calendar** and speaks today's plans — needed a Google account + 2007 Google's servers (both long dead) | A tiny **native fake-Google server** revives it — **no Google account, no internet**; bubbles in English | [tools/gcal-xp](tools/gcal-xp/README.md) |
-| 📬 **Mail check** | A "you've got mail" mascot bubble over POP3 | Served by the same local server (a working fake mailbox) | [tools/gcal-xp](tools/gcal-xp/README.md) |
-| 🧮 **Themed calculators** | iM@S- and Lucky☆Star-skinned calculators + a doujin **converter** (BPM↔ms, ms↔fps frames, page-count↔paper thickness, tax) | Cracked the calc's `PACKDATA`/`.nut` codecs; translated the baked button labels (re-drawn in MS PGothic) + the converter's strings | [mink-format.md](docs/mink-format.md) · [re-notes.md](docs/re-notes.md) |
-| 🖼️ **Wallpapers** | 84 wallpapers (14 artists × resolutions) + an HTML **picker** | Filenames + picker UI + the baked section-header art all Englished | [patch-system.md](docs/patch-system.md) |
-| 🌙 **Screensavers** | 4 (iM@S 3D, iM@S Comic, Lucky☆Star Comic, Chibi Characters) | Renamed to their English Display-Properties names | [patch-system.md](docs/patch-system.md) |
-| 📦 **The installer** | SYGNAS's own Inno Setup wizard (full-screen blue gradient, Lucky☆Star art, pixel-exact 586×364) | Re-wrapped in English from **your** `setup.exe`, faithful to the original look | [end-user-build.md](docs/end-user-build.md) |
+Everything runs in English on Windows XP. Here's each piece and how to trigger it; the
+reverse-engineering behind it all is documented at the **bottom of this README**.
+
+| Feature | What it is | How to use it |
+|---|---|---|
+| 🧍 **Desktop mascots** ("Copy Animation") | Hand-drawn Konata / Kagami / Chihaya / Makoto / Yayoi (per-pixel-alpha, driven by the in-house **MinkIt** engine) that replace XP's file-copy animation. | Copy or move files in Explorer — a character plays the copy. Right-click its tray icon ▸ **Options** to choose the character or enable it per file operation. |
+| 🗨️ **The launcher** | A desktop mascot (22 characters) with English speech bubbles. | **Click on her chest** to open the app launcher — yes, really; it's a classic anime gag — the **left side** opens the main menu (calculators, calendar, copy-animation, wallpaper, Display Properties), the **right side** opens a second menu (empty by default, for your own shortcuts). **Right-click her** for Calendar check / Mail check / Settings. **Add or change menu entries** in `launcher\Launch.ini`: under `[Launch]`, `Exec000…`/`Title000…` is the left menu and `Exec100…`/`Title100…` the right; `[Data] Chara=konata.Xvi` swaps the mascot. |
+| 📅 **The talking calendar** | A mascot that speaks today's plans — originally Google Calendar, revived by a **bundled local server** (no Google account, no internet). | Runs at startup, or right-click the mascot ▸ **calendar check** → she reads the day's events. **Google Calendar** in the menu opens the full month grid. Put your own events in `gcal-xp\gcalsrv.lua` (the `EVENTS` table — it hot-reloads on save). |
+| 📬 **Mail check** | A "you've got mail" bubble backed by a working local **POP3** mailbox. | Runs at startup, or right-click the mascot ▸ **mail check**; the bubble opens your mail client (Outlook Express by default). Edit your inbox in `gcalsrv.lua` (the `MAIL` table). |
+| 🧮 **Themed calculators** | iM@S- and Lucky☆Star-skinned calculators plus a doujin unit **converter**. | Launch **iM@S Calculator** or **Lucky Star Calculator** from the launcher menu. The converter does BPM↔ms, ms↔fps frames, page-count↔paper thickness, and tax. |
+| 🖼️ **Wallpapers** | 84 wallpapers (14 artists × resolutions) with an HTML **picker**. | Launch **Wallpaper** from the menu, then click a thumbnail in the gallery to set it. |
+| 🌙 **Screensavers** | Four: iM@S 3D, iM@S Comic, Lucky☆Star Comic, Chibi Characters. | **Control Panel ▸ Display ▸ Screen Saver** → choose a *LuckyMas* one. ⚠️ *Known issue:* they error on a non-Japanese-locale XP — [under investigation](docs/next-builds.md). |
+| 📦 **The installer** | SYGNAS's Inno Setup wizard, faithfully re-wrapped in English. | Run `setup.exe` — or build your own English disc from your copy (see below). |
 
 ### The calendar, with no Google account
 

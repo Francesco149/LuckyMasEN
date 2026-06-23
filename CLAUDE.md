@@ -91,7 +91,8 @@ bulk-renames files by a substring map + rewrites refs in lockstep. **The transla
 all PE-resource UI, all hardcoded/runtime JP, gcal.exe's 3 custom-drawn toolbar buttons (更新/表示設定/動作設定 →
 Refresh/View/Options via `asmpoke`), the themed calculators (`calmain.nut` + button PNGs), the
 wallpaper picker (84 JPGs + HTML refs ASCII'd; 壁紙の設定方法/壁紙一覧/モニターサイズ header images retexted),
-the 4 screensaver filenames (= their Display-Properties names), and the 5 MinkIt mascot Titles (Konata/
+the 4 screensaver filenames (= their Display-Properties names; ⚠️ but the ASPack `.scr` engine errors on
+non-JP-locale XP — open investigation, `docs/next-builds.md` §"Session 17"), and the 5 MinkIt mascot Titles (Konata/
 Kagami/Chihaya/Makoto/Yayoi) are EN. Held back (recorded, non-text): the `CreateFontA` facenames
 (`ＭＳ Ｐゴシック`; fine when PGothic present — the installer bundles it), MFC/VERSIONINFO boilerplate, and
 the textless `.mink` **a0/m0 sprite** codec (the `info` metadata codec is now cracked; a0/m0 carry no text).

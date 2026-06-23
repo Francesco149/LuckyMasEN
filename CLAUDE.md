@@ -101,9 +101,13 @@ cache → **pinned + SHA-256 auto-download** (`~/.cache/luckymasen`; pins in `ma
   runs ISCC **natively (no wine)**; the zip is assembled from Linux by **`tools/make_windows_bundle.sh`**
   (toolchain + prebuilt `gcalsrv.exe` + a cache pre-seeded with the Windows tool builds → offline). **Linux**
   = **`nix run .#iso`** (flake app `apps.iso`; local checkout or remote-staged from `${self}`; self-builds
-  `gcalsrv.exe` via build.sh if absent). **Validated end-to-end on real Win10 (native ISCC) + Linux** →
-  byte-valid 48 MB ISO. `gcalsrv.exe` is OUR redistributable artifact (ship prebuilt; no mingw for the user).
-  Output-on-Windows console must stay ASCII/encoding-safe (cp1252). Guide: `docs/end-user-build.md`.
+  `gcalsrv.exe` via build.sh if absent) **and a tarball** via `tools/make_linux_bundle.sh`. **Validated
+  end-to-end on real Win10 (native ISCC) + Linux** → byte-valid 48 MB ISO. `gcalsrv.exe` is OUR
+  redistributable artifact (ship prebuilt; no mingw for the user). Output-on-Windows console must stay
+  ASCII/encoding-safe (cp1252). Guide: `docs/end-user-build.md`.
+- **CI**: `.github/workflows/nightly.yml` builds gcalsrv + both bundles (lean `nix shell`, NOT the full
+  devShell) on every push to master and moves the **`nightly`** prerelease tag to the built commit with the
+  latest artifacts. Test Windows builds natively on this WSL box's host via interop (`cmd.exe`, `/mnt/c`).
 
 ## Conventions
 - Persist cross-session **orientation in this CLAUDE.md**; the running RE/build narrative in

@@ -499,3 +499,55 @@ sha256**. Detail in `CLAUDE.md` §"one-command end-user builder" + `docs/end-use
 **Next (open):** a CI-built truly-zero-install Windows `.exe` (PyInstaller, no first-run Python fetch) as an
 optional release artifact; otherwise the self-service builder is done + validated on both OSes. The on-XP
 full-stack test (translation + gcal-xp + installer) remains the other open item from Session 11.
+
+## ✅ Session 13 (2026-06-23) — on-XP polish DONE; 4 RE items teed up (handoff before /clear)
+
+On-XP testing surfaced bugs; the clear ones are fixed + committed + redeployed: Konata default mascot;
+calendar pre-seed `gcal.ini`+`gcal.dat` (this also **fixed the "frozen mascot"** — a missing `gcal.dat`
+made the launcher hang in its credential path *before* any network call, no modal); mail OOB via a
+pre-seeded POP3 profile #1 → localhost + Outlook Express as the click-to-launch "Client"; ASCII tray
+About; "Open gcalsrv.lua" now opens Notepad explicitly (.lua has no XP association); CRLF/ASCII
+`gcalsrv.lua`; gcal date `年/月` → `%4d-%02d`; and the **events-piling-on-the-1st** fix (`gcalsrv.lua`
+now honors the `start-min..start-max` window — events on their real day, `["*"]` wildcard only on "today").
+
+### 4 remaining items — full ghidra findings (decompiled C on disk: `out/ghidra/{MinkIt.dll,MinkIt.exe,gcal.exe}/all.c`, gitignored)
+Re-export any time (inside `nix develop`): `mkdir -p /tmp/ghidra-proj && ghidra-analyzeHeadless /tmp/ghidra-proj
+lm_<n> -import originals/installed/app/<path> -overwrite -scriptPath ../openrecet/tools/ghidra-scripts
+-postScript ExportDecompiledC.java out/ghidra/<n>`.
+
+1. **MinkIt animation names (owner chose: DECODE the .mink + document the codec).** The Settings listbox
+   (control id `0x3ec`) + the Preview "Title:" show each `.mink`'s **`Title=`** field from its **`info`
+   chunk**, which is **LZSS-bit-compressed with MinkIt's OWN codec** (verified NOT the cracked `.nut` codec —
+   both `.nut` decoders give garbage). Call graph: MinkIt.exe `FUN_004015a0` (@0x4015a0) globs `*.mink` →
+   MinkIt.dll **`GetExtraInfo`** (@0x10001a70) reads the `info` chunk via **`FUN_10002570`** (@0x10002570)
+   → decodes via **`FUN_100023e0`** (@0x100023e0; bit reader **`FUN_10002350`** @0x10002350) → parses
+   `Title=`/`Author=` (keys at `DAT_1000e298`="Title=" + "Author="). Listbox item = ExtraInfo+0 (Title);
+   per-`.mink` struct stride 0x180. Info chunk layout = `[u32 decompressed_size][LZSS bitstream]`
+   (konata_copy.mink: `info`@0x40 size 0x60, declared size 0x51=81). Codec sketch: malloc(size+100); flag
+   accumulator `local_12[0]=0xff` MSB-first; flag bit==0 → literal (8 bits), else back-reference. **TODO:
+   read FUN_100023e0+FUN_10002350 fully, implement decode+encode in `tools/sygnas_unpack.py`/`sygnas_repack.py`,
+   document the codec in `docs/mink-format.md`, then a build_patch op to swap the 5 Titles (Konata/Kagami/
+   Chihaya/Makoto/Yayoi) to ASCII.** (Alt was: patch MinkIt to show the filename — rejected; we document the format.)
+
+2. **gcal.exe 3 toolbar buttons.** Custom-drawn (not a menu): `TextOutW(L"更新")` @x=8 (all.c ~L1055),
+   `L"表示設定"` @x=0x26=38 (~L1085), `L"動作設定"` @x=0x58=88 (~L1116); `CStringT::SetString(...,len 2/4)`.
+   English (Refresh/Display/Options...) is longer than the in-place wide budget → needs the strings
+   **relocated** (longer, in a cave/new section) + the x positions + SetString length immediates adjusted
+   (+ maybe a wider title bar). 表示設定→opens the calendar-select modal; 動作設定→the GoogleAccount dialog.
+
+3. **gcal.exe "click an event → opens the launcher folder."** `ShellExecuteW(0,L"open",(LPCWSTR)event[5],...)`
+   at all.c ~L1625 + ~L3462; `event[5]` = the event's URL field, which our feed leaves empty → falls back to
+   the cwd/folder. Optional fix: have `gcalsrv.lua` put a real per-event link (the add-event template) so a
+   click does something meaningful — or leave it (possibly-intended).
+
+4. **gcal.exe "events all on one line" (now on the correct day).** The per-day cell draws the day number
+   (`TextOutW L"%2d "` ~L1523) then events via `FUN_00409980`; need to confirm whether the event Y is fixed
+   per cell (a layout cap) or advances per event (then stackable). Trace `FUN_00409980` + the event-list draw.
+
+5. **MinkIt About + Preview URL controls clipped — move left 2px (pe_res geometry).** `ABOUTDLG` + `PREVIEWDLG`
+   in MinkIt.exe. `PREVIEWDLG` already has `[pe_res.layout.PREVIEWDLG]` overrides (idx 0,1 value fields; 5,6,7
+   labels) in `patch/manifest.toml`; the URL value control + the ABOUTDLG URL statics need x−=2 (or widen).
+   Dump control rects (pe_res) to get the indices/current x.
+
+**Suggested order:** pe_res URL nudge (quick) → MinkIt info-codec crack + names + format doc → gcal buttons
+relocation → gcal click-link + events-layout. All earlier fixes are committed + on the q9650 test box.

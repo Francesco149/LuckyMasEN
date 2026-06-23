@@ -1,0 +1,59 @@
+name: nightly
+
+# Build the self-contained self-service patchers (Windows + Linux) and publish them as a rolling
+# "nightly" prerelease whose tag always points at the commit that was built. Re-runs replace the
+# artifacts + move the tag, so the nightly release is always the latest master.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # move the nightly tag + update the release
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Build gcalsrv.exe (our redistributable server; mingw cross-compile via nix)
+        run: bash tools/gcal-xp/build.sh
+
+      # The assemblers only need a few tools — pull just those, NOT the full RE/TL devShell.
+      - name: Assemble the Windows bundle
+        run: nix shell nixpkgs#libarchive nixpkgs#innoextract nixpkgs#curl nixpkgs#unzip --command bash tools/make_windows_bundle.sh
+
+      - name: Assemble the Linux bundle
+        run: nix shell nixpkgs#libarchive nixpkgs#innoextract nixpkgs#curl --command bash tools/make_linux_bundle.sh
+
+      - name: Publish / refresh the nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          short="$(git rev-parse --short HEAD)"
+          cat > /tmp/notes.md <<'NOTES'
+          Self-service English-patch builders for SYGNAS 「らき☆マス」 (Lucky*Mas).
+
+          - **Windows:** unzip `LuckyMasEN-builder-win.zip`, run `build.bat --setup <disc>\setup.exe --font auto` (native Inno Setup, no wine).
+          - **Linux:** unpack `LuckyMasEN-builder-linux.tar.gz`, run `./build.sh --setup <disc>/setup.exe --font auto` (needs python3 + wine + innoextract).
+
+          You supply your own disc `setup.exe` + your own MS PGothic; nothing here redistributes a SYGNAS or Microsoft file. Full guide: `docs/end-user-build.md`.
+          NOTES
+          # delete the old release + tag, then recreate the tag at THIS commit with the latest artifacts
+          gh release delete nightly --cleanup-tag --yes || true
+          gh release create nightly \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Nightly ($short)" \
+            --notes-file /tmp/notes.md \
+            out/LuckyMasEN-builder-win.zip \
+            out/LuckyMasEN-builder-linux.tar.gz

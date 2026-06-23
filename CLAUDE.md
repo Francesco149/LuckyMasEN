@@ -59,7 +59,9 @@ so the mascots' calendar/mail work with no Google account:
   overrides + **hot-reloads** on save): user-editable **date-keyed `EVENTS`/`MAIL` tables** drive the
   bubbles (a working fake POP3 mailbox — STAT/LIST/UIDL/RETR/TOP). C↔Lua = `http_handle` + `pop3_event`.
 - **Tray UI** (Open gcalsrv.lua / About / Close; `--no-tray` = headless for SMB-exec); Lua errors pop a
-  message box. **`--install-cert`** imports the cert into LocalMachine\Root silently. The **installer
+  message box. **`--install-cert`** writes the cert to `HKLM\…\SystemCertificates\Root` via the **registry
+  store provider** (`CERT_STORE_PROV_REG`) — silent even run interactively (the SYSTEM store provider pops
+  XP's protected-root modal; REPLACE_EXISTING = two prompts). The **installer
   auto-installs** it: `{app}\gcal-xp` + `{commonstartup}` autostart + silent cert trust ([Run]).
 - **`tools/gcal-emu/gcal_emu.py`** is the protocol **oracle** (Python; retired as a deployed host,
   kept as the reference for the exact responses). Wire format + bubble↔scenario table:

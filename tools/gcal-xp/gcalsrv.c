@@ -480,44 +480,43 @@ static int tls_init(void) {
     return 1;
 }
 
-/* Install the public cert into XP's Root so WinINet trusts the TLS endpoint.
- * Runs in a BACKGROUND thread: on XP, CertAddEncodedCertificateToStore to a Root
- * store pops a protected-root confirmation MODAL, which would block startup before
- * the listeners bind. Threading it off lets the server serve regardless. (If gcal.exe
- * ignores cert errors the prompt is moot; for a silent unattended install, import the
- * cert via certutil/registry instead — see the README.) */
+/* Trust the embedded cert by writing it to HKLM\SOFTWARE\Microsoft\SystemCertificates\Root
+ * through the REGISTRY store provider — the SILENT path. The SYSTEM store provider
+ * (CERT_STORE_PROV_SYSTEM + CERT_SYSTEM_STORE_LOCAL_MACHINE "ROOT") pops XP's protected-root
+ * confirmation MODAL(s) on an interactive Root add — and CERT_STORE_ADD_REPLACE_EXISTING makes
+ * it TWO prompts ("delete this root cert?" then "install this root cert?"). The installer runs
+ * --install-cert as the logged-in (elevated) user, so the user saw both. The raw registry
+ * provider is plain registry I/O: no UI, and WinINet/Schannel still trust it because HKLM
+ * ...\SystemCertificates\Root IS the machine root store. Requires admin (the installer is
+ * elevated); CertCloseStore flushes the serialized cert blob to the registry. */
+static int install_root_cert_silent(void) {
+    if (!g_pCert) return 0;
+    HKEY hk;
+    LONG rc = RegCreateKeyExA(HKEY_LOCAL_MACHINE,
+        "SOFTWARE\\Microsoft\\SystemCertificates\\Root", 0, NULL,
+        REG_OPTION_NON_VOLATILE, KEY_READ | KEY_WRITE, NULL, &hk, NULL);
+    if (rc != ERROR_SUCCESS) { logln("cert: open HKLM Root key failed (%ld) — admin?", rc); return 0; }
+    HCERTSTORE h = CertOpenStore(CERT_STORE_PROV_REG, X509_ASN_ENCODING, 0, 0, (const void *)hk);
+    if (!h) { logln("cert: CertOpenStore(REG Root) failed 0x%08lx", GetLastError()); RegCloseKey(hk); return 0; }
+    BOOL ok = CertAddEncodedCertificateToStore(h, X509_ASN_ENCODING, g_pCert->pbCertEncoded,
+                g_pCert->cbCertEncoded, CERT_STORE_ADD_REPLACE_EXISTING, NULL);
+    CertCloseStore(h, 0);                       /* flush the new cert blob to the registry */
+    RegCloseKey(hk);
+    logln("cert: install -> HKLM\\...\\Root (registry, silent): %s", ok ? "ok" : "FAILED");
+    return ok;
+}
+
+/* Background thread so a (now-silent) cert install can never block serving. */
 static DWORD WINAPI cert_install_thread(void *arg) {
     (void)arg;
-    if (!g_pCert) return 0;
-    HCERTSTORE hRootU = CertOpenStore(CERT_STORE_PROV_SYSTEM_A, 0, 0, CERT_SYSTEM_STORE_CURRENT_USER, "ROOT");
-    if (hRootU) {
-        BOOL ok = CertAddEncodedCertificateToStore(hRootU, X509_ASN_ENCODING,
-                    g_pCert->pbCertEncoded, g_pCert->cbCertEncoded, CERT_STORE_ADD_REPLACE_EXISTING, NULL);
-        logln("cert: install -> CurrentUser\\Root: %s", ok ? "ok" : "FAILED");
-        CertCloseStore(hRootU, 0);
-    } else logln("cert: open CurrentUser\\Root failed 0x%08lx", GetLastError());
-    HCERTSTORE hRootM = CertOpenStore(CERT_STORE_PROV_SYSTEM_A, 0, 0, CERT_SYSTEM_STORE_LOCAL_MACHINE, "ROOT");
-    if (hRootM) {
-        BOOL ok = CertAddEncodedCertificateToStore(hRootM, X509_ASN_ENCODING,
-                    g_pCert->pbCertEncoded, g_pCert->cbCertEncoded, CERT_STORE_ADD_REPLACE_EXISTING, NULL);
-        logln("cert: install -> LocalMachine\\Root: %s", ok ? "ok" : "FAILED(no admin?)");
-        CertCloseStore(hRootM, 0);
-    }
+    install_root_cert_silent();
     return 0;
 }
 
-/* --install-cert: import the embedded cert into LocalMachine\Root ONLY (no CurrentUser store =
- * no protected-root modal) and exit. For the installer to silently trust the TLS endpoint as
- * admin, so the autostarted gcalsrv can then run --no-cert. */
+/* --install-cert: silently trust the embedded cert (elevated installer step), then exit, so the
+ * autostarted gcalsrv can run --no-cert. */
 static int cert_install_machine(void) {
-    if (!g_pCert) return 0;
-    HCERTSTORE h = CertOpenStore(CERT_STORE_PROV_SYSTEM_A, 0, 0, CERT_SYSTEM_STORE_LOCAL_MACHINE, "ROOT");
-    if (!h) { logln("cert: open LocalMachine\\Root failed 0x%08lx", GetLastError()); return 0; }
-    BOOL ok = CertAddEncodedCertificateToStore(h, X509_ASN_ENCODING, g_pCert->pbCertEncoded,
-                g_pCert->cbCertEncoded, CERT_STORE_ADD_REPLACE_EXISTING, NULL);
-    logln("cert: --install-cert -> LocalMachine\\Root: %s", ok ? "ok" : "FAILED");
-    CertCloseStore(h, 0);
-    return ok;
+    return install_root_cert_silent();
 }
 
 /* Server-side handshake. On success: *ctx valid, inbuf[0..*inlen) holds leftover app bytes. */

@@ -46,15 +46,15 @@ inside the EXE as an **XP-legacy PKCS#12** (pbeWithSHA1And3-KeyTripleDES-CBC + S
 Schannel's server credential (user keyset, falling back to **machine keyset** under SYSTEM) and installs the
 public cert into XP's **Root** so WinINet trusts the TLS endpoint.
 
-⚠️ **The in-process Root install pops XP's protected-root confirmation modal** and is done in a background
-thread (so it never blocks serving). For an **unattended/silent** install, import the cert out-of-band instead
-and run with `--no-cert`:
-
-```bat
-certutil -addstore -f Root C:\gcal-xp\xp-google.cer        REM LocalMachine\Root (admin)
-```
-
-(or write the registry blob directly). *TODO: bake a silent cert install into the first-run installer.*
+The Root install is **silent**: the cert is written to `HKLM\SOFTWARE\Microsoft\SystemCertificates\Root`
+through the **registry store provider** (`CERT_STORE_PROV_REG`), which is plain registry I/O. The usual
+SYSTEM store provider (`CERT_STORE_PROV_SYSTEM` + `CERT_SYSTEM_STORE_LOCAL_MACHINE` "ROOT") pops XP's
+protected-root confirmation MODAL on an interactive Root add — and `CERT_STORE_ADD_REPLACE_EXISTING` makes
+that TWO prompts ("delete this root cert?" then "install this root cert?") — which is what the installer's
+`--install-cert` step (run as the logged-in user) used to show. The registry path has no UI, yet WinINet/
+Schannel still trust it (that key IS the machine root store). Needs admin (the installer is elevated).
+Verified silent + trusted on real XP SP3 (2026-06-23): `--install-cert` completes with no modal, the cert
+reg blob is recreated, and a fresh WinINet ClientLogin trusts the endpoint.
 
 ## Run / flags
 

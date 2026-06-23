@@ -35,6 +35,11 @@ You don't deploy/drive XP from this repo — the full, current, private recipe l
   = `10.0.10.134`, EN, no-WoL, CRT (capture-black); **timemachine** = `.113/.114/.115`, WoL-able, LCD, JP.
   EN install root `C:\Program Files\SYGNAS\LuckyMas\{copy,launcher,calc,wallpaper}`. Loop the owner in only
   for visual judgment a screenshot can't settle, or physical actions. **Everything specific lives in retro-hardware.**
+- **Waking timemachine (WoL): wslop/WSL2 CANNOT send WoL** (NAT drops the broadcast) — **relay through `code`**
+  (`ssh root@code`, LAN `10.0.10.53`): `WOL=$(ssh root@code 'sh -c "ls -d /nix/store/*wakeonlan*/bin/wakeonlan|head -1"'); ssh root@code "$WOL 74:d4:35:ea:6d:f2"`
+  (wakeonlan isn't on code's PATH → glob the store). Then the courier is on the LAN at `10.0.10.115`; arm a
+  one-shot XP boot: `ssh root@10.0.10.115 'grub-reboot "Windows XP (Crucial)" && systemctl reboot'`. Full
+  ladder in retro-hardware `xp-ops-cheatsheet.md`. (Don't re-derive this — it's the standing recipe.)
 
 ## Building XP binaries (i686, XP subsystem)
 Cross-compile with mingw-w64 via nix (works in `nix develop`):

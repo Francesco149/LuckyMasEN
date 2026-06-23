@@ -336,6 +336,21 @@ note = "Launch.exe menus (IDR_MAINMENU/IDR_ITEMMENU) + dialogs (SETUPDLG/APPNAME
 "名前を付けて保存(&S)" = "Save As(&S)"
 "ｽﾀｰﾄｱｯﾌﾟに登録(&R)" = "Add to Startup(&R)"
 
+# MinkIt.exe URL hyperlinks: FUN_004010b0 (@0x4010b0) turns the About website/email + Preview URL
+# controls into blue underlined hyperlinks — it measures the URL text (GetTextExtentPoint32A) and
+# SetWindowPos's the control to EXACTLY that width (uFlags=6 = SWP_NOMOVE|SWP_NOZORDER, resize-only).
+# The control's internal margin then clips the last ~2-4px ("...ichigo-cafe.com/" -> "...cafe.cor"),
+# and this runtime resize OVERRIDES the dialog-template cx (so [pe_res.layout] cx alone can't fix it).
+# Fix: add SWP_NOSIZE (uFlags 6->7) at the `push 6` before the SetWindowPos call (file VA 0x40115c,
+# 6a06->6a07) so the control KEEPS its template width — then the [pe_res.layout.*] cx below holds
+# (ABOUTDLG x=27 cx=95 fills the empty space to the dialog edge; PREVIEWDLG URL x=40 cx=140).
+[[asmpoke]]
+file = "app/copy/MinkIt.exe"
+note = "MinkIt.exe FUN_004010b0: URL hyperlinks keep their template width (SWP uFlags 6->7 = +NOSIZE) instead of shrink-to-text, which margin-clipped the URL"
+poke = [
+  { va = 0x40115c, old = "6a06", new = "6a07" },
+]
+
 # MinkIt.exe — the copy-animation app (launcher "Copy Animation"). Its config dialogs.
 [[pe_res]]
 file = "app/copy/MinkIt.exe"
@@ -360,18 +375,15 @@ note = "MinkIt.exe config — ABOUTDLG / PREVIEWDLG / SETUPDLG"
 7 = { cx = 34 }            # "URL:" label
 0 = { x = 40, cx = 140 }   # Title value field
 1 = { x = 40, cx = 140 }   # Author value field
-2 = { x = 40, cx = 140 }   # URL value field
-# ABOUTDLG layout: the author website (#4) + email (#5) read-only Edits clip the long URL
-# "http://www.ichigo-cafe.com/" (27 chars) on the right. The original 123-wide dialog is too
-# narrow to hold a field that long — a nudge within it (the old x=31 cx=89) only fit the URL in
-# the NARROW JP font on timemachine; the wider EN font on the q9650 still clipped. Fix: WIDEN THE
-# DIALOG (cx 123->175) and the two URL Edits to cx=143 (x+cx=170, 5px margin) so the full URL/email
-# show in any locale font; re-center the OK button in the wider dialog. (Verified on XP 2026-06-23.)
+2 = { x = 40, cx = 140 }   # URL value field  (RefURL http://sygnas.jp/ ~58 dlu, fits cx=140)
+# ABOUTDLG layout: the author website (#4) + email (#5) hyperlink Edits. With the SWP_NOSIZE asmpoke
+# above stopping the shrink-to-text, the control now KEEPS this template width — so set it wide enough
+# for "http://www.ichigo-cafe.com/" (the longest, ~93 dlu in MS PGothic 9pt): x=27 (1px after the
+# MINKIT logo at x=26) cx=95 -> x+cx=122, the max within the 123-wide dialog (1px margin, uses the
+# empty space). Both URLs now render in full. (Verified on XP q9650 + timemachine 2026-06-23.)
 [pe_res.layout.ABOUTDLG]
-dialog = { cx = 175 }      # widen (was 123) so a full-URL-width field fits
-0 = { x = 62 }             # re-center OK button (50 wide) in the 175-wide dialog
-4 = { x = 27, cx = 143 }   # author website URL Edit -> http://www.ichigo-cafe.com/ (was x=31 cx=89)
-5 = { x = 27, cx = 143 }   # author email Edit (was x=31 cx=89)
+4 = { x = 27, cx = 95 }    # author website URL Edit (kept, not shrunk, by the SWP_NOSIZE poke)
+5 = { x = 27, cx = 95 }    # author email Edit
 
 # WinCalc.exe — base calculator (NOT launched by the launcher; it runs the themed
 # WinCalcImas/Lucky, whose UI is .nut-scripted behind the un-cracked codec — deferred).

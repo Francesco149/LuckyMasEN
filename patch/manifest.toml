@@ -107,6 +107,41 @@ strings = [
   { old = "http://www.google.com/calendar/event?action=TEMPLATE&dates=%4d%02d%02d/%4d%02d%02d", new = "http://localhost/calendar/event?action=TEMPLATE&dates=%4d%02d%02d/%4d%02d%02d" },
 ]
 
+# gcal.exe toolbar: the 3 custom-drawn header buttons 更新/表示設定/動作設定 -> EN.
+# In FUN_004027c0 each button = SetString(this, L"<jp>", count) + a hardcoded hit-rect
+# {x,y,w,h} stored at [esi+0x20..],[+0x30..],[+0x40..] + TextOutW(hdc, x, 6, str, len).
+# The 3 wide literals are packed tight in .rdata (no slack) so they're RELOCATED to a
+# verified-zero, mapped (within .rdata VirtualSize 0x10574), unreferenced internal gap
+# at VA 0x449858; the `push offset` is repointed, the SetString count + the hit-rect x/w
+# + the TextOutW x immediates are bumped for the wider EN text (all same-size, in-place).
+# TextOutW x stays a push imm8 (<=0x7f). Layout: Refresh@8 View@0x3c Options@0x60.
+# 表示設定->calendar-select modal; 動作設定->GoogleAccount dialog (hit-rects verified on XP).
+[[asmpoke]]
+file = "app/launcher/gcal.exe"
+note = "gcal.exe toolbar 更新/表示設定/動作設定 -> Refresh/View/Options (relocate + repoint + resize)"
+wstr = [
+  { va = 0x449858, text = "Refresh" },
+  { va = 0x449868, text = "View" },
+  { va = 0x449872, text = "Options" },
+]
+poke = [
+  # button 1 "Refresh": count 2->7, ptr ->0x449858, hit-w 0x14->0x2e (x=8 unchanged)
+  { va = 0x402855, old = "6a02",       new = "6a07" },
+  { va = 0x402857, old = "6898b24400", new = "6858984400" },
+  { va = 0x40287b, old = "ba14000000", new = "ba2e000000" },
+  # button 2 "View": ptr ->0x449868, hit-x 0x26->0x3c, hit-w 0x28->0x1e, TextOutW x 0x26->0x3c
+  { va = 0x4028d9, old = "68a0b24400", new = "6868984400" },
+  { va = 0x4028e9, old = "b826000000", new = "b83c000000" },
+  { va = 0x4028fd, old = "ba28000000", new = "ba1e000000" },
+  { va = 0x402918, old = "6a26",       new = "6a3c" },
+  # button 3 "Options": count 4->7, ptr ->0x449872, hit-x 0x58->0x60, hit-w 0x28->0x2e, TextOutW x 0x58->0x60
+  { va = 0x402954, old = "6a04",       new = "6a07" },
+  { va = 0x402956, old = "68acb24400", new = "6872984400" },
+  { va = 0x402966, old = "b858000000", new = "b860000000" },
+  { va = 0x40297a, old = "ba28000000", new = "ba2e000000" },
+  { va = 0x402995, old = "6a58",       new = "6a60" },
+]
+
 # ═════════════════════════════════════════════════════════════════════════════
 # HARDCODED runtime strings (NOT PE resources). Found with tools/scan_jp.py — these
 # are string literals compiled into the binaries, drawn at runtime by AppendMenu /

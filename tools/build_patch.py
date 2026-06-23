@@ -41,8 +41,8 @@ from sygnas_repack import repack_acz, repack_packdata, repack_mink   # xvi / pak
 from sygnas_unpack import parse_acz, parse_packdata, mink_chunks, mink_info_decompress
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OP_ORDER = ['xvi', 'text_keys', 'text_subst', 'text_file', 'binpatch', 'pe_res', 'pak',
-            'img_text', 'mink_info', 'rename', 'rename_map']
+OP_ORDER = ['xvi', 'text_keys', 'text_subst', 'text_file', 'binpatch', 'asmpoke', 'pe_res',
+            'pak', 'img_text', 'mink_info', 'rename', 'rename_map']
 
 
 class PatchError(Exception):
@@ -164,6 +164,42 @@ def op_binpatch(e, ctx):
         i = data.find(needle)
         data[i:i + len(oe)] = ne + b'\x00' * (len(oe) - len(ne))   # shrink in place; tail->NUL
         log.append(f"        {old!r} -> {new!r}  @0x{i:x}  (pad {len(oe) - len(ne)}b)")
+    open(path, 'wb').write(bytes(data))
+    return log
+
+
+def op_asmpoke(e, ctx):
+    """Same-size in-place byte pokes + wide-string writes into a verified-zero cave.
+    For .text/.rdata surgery beyond binpatch (relocating + repointing string literals,
+    bumping immediates). `va` = virtual address; file offset = va - imagebase (default
+    0x400000, valid when each section's RawPtr == VirtAddr-imagebase). Every poke verifies
+    `old` before writing `new` (must be equal length); every wstr asserts the destination
+    is currently all-zero (a mapped, unreferenced cave). NOT lief: a raw surgical edit, so
+    the PE loads byte-for-byte unchanged on XP. Does NOT recompute the PE checksum (cosmetic
+    on XP — stale-checksum EXEs load fine; a later pe_res op on the same file refreshes it)."""
+    path = os.path.join(ctx['out'], tmpl(e['file'], ctx['meta']))
+    base = e.get('imagebase', 0x400000)
+    data = bytearray(open(path, 'rb').read())
+    log = [f"    poke {e['file']}"]
+    for w in e.get('wstr', []):
+        off = w['va'] - base
+        enc = (w['text'] + '\x00').encode('utf-16-le')
+        cur = bytes(data[off:off + len(enc)])
+        if any(cur):
+            raise PatchError(f"asmpoke {e['file']}: cave @0x{w['va']:x} not zero ({cur.hex()})")
+        data[off:off + len(enc)] = enc
+        log.append(f"        wstr @0x{w['va']:x} = {w['text']!r} ({len(enc)}b)")
+    for p in e.get('poke', []):
+        off = p['va'] - base
+        old = bytes.fromhex(p['old'].replace(' ', ''))
+        new = bytes.fromhex(p['new'].replace(' ', ''))
+        if len(old) != len(new):
+            raise PatchError(f"asmpoke {e['file']} @0x{p['va']:x}: {p['old']}/{p['new']} length differ")
+        cur = bytes(data[off:off + len(old)])
+        if cur != old:
+            raise PatchError(f"asmpoke {e['file']} @0x{p['va']:x}: expected {old.hex()} got {cur.hex()}")
+        data[off:off + len(new)] = new
+        log.append(f"        poke @0x{p['va']:x} {p['old']} -> {p['new']}")
     open(path, 'wb').write(bytes(data))
     return log
 
@@ -362,7 +398,7 @@ def op_rename_map(e, ctx):
 
 
 OPS = {'xvi': op_xvi, 'text_keys': op_text_keys, 'text_subst': op_text_subst,
-       'text_file': op_text_file, 'binpatch': op_binpatch, 'pe_res': op_pe_res,
+       'text_file': op_text_file, 'binpatch': op_binpatch, 'asmpoke': op_asmpoke, 'pe_res': op_pe_res,
        'pak': op_pak, 'img_text': op_img_text, 'mink_info': op_mink_info,
        'rename': op_rename, 'rename_map': op_rename_map}
 

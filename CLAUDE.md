@@ -69,11 +69,16 @@ so the mascots' calendar/mail work with no Google account:
 Every file we patch goes through ONE pipeline → spec in `docs/patch-system.md`. `manifest.toml` is the
 single source of truth (one entry per file + op + note; `active=false` = recorded-but-deferred);
 `build_patch.py` mirrors `originals/installed/`→`out/patched/` (gitignored), applies ops, writes
-`PATCH-LOG.txt`. Ops: `xvi`/`text_keys`/`text_subst`/`text_file`/`binpatch`/`pe_res`/`pak`/`img_text`/`mink_info`/`rename`/`rename_map`. Reproducible.
+`PATCH-LOG.txt`. Ops: `xvi`/`text_keys`/`text_subst`/`text_file`/`binpatch`/`asmpoke`/`pe_res`/`pak`/`img_text`/`mink_info`/`rename`/`rename_map`. Reproducible.
 `pe_res` (`tools/pe_res.py`) **surgically** patches PE-resource menus/dialogs (lang 1041) + does geometry
 overrides — **never `lief.write()`** (it rebuilds the PE and crashes XP). `binpatch` does size-preserving
 NUL-terminated string replace: `wide=true` (UTF-16) | `encoding="cp932"` (SJIS, for JP drawn via `*A` APIs)
-| latin1. Find hardcoded JP with **`tools/scan_jp.py`** (`strings` can't see cp932). The `pak` op rebuilds the calc
+| latin1. `asmpoke` (`tools/build_patch.py`) is the **.text/.rdata surgeon** for what binpatch can't do —
+same-size verified byte `poke`s (each asserts its `old` bytes) + `wstr` writes of UTF-16 literals into a
+**mapped, verified-zero, unreferenced cave** (within a section's VirtualSize — NOT the file-align slack past it,
+which is unmapped). Used to relocate gcal.exe's 3 custom-drawn toolbar labels to a cave + repoint the
+`push offset` + bump the SetString counts / hit-rect x,w / TextOutW x immediates (`va`=virtual addr; no `lief`).
+Find hardcoded JP with **`tools/scan_jp.py`** (`strings` can't see cp932). The `pak` op rebuilds the calc
 `data.pak`: per-member `.nut` string `subs` (decode via the cracked LZSS — `sygnas_unpack.pak_decompress`/
 `sygnas_repack.pak_compress` — find/replace, re-compress) + `gen="calc_png"` (retext the baked button-label
 PNGs from the user's own images via `tools/calc_png.py`, MS PGothic). `img_text` retexts loose baked-text
@@ -81,7 +86,8 @@ images (the wallpaper section headers, same `calc_png` engine); `mink_info` reti
 names (decode each `.mink` `info` chunk via the cracked third LZSS — `sygnas_*.mink_info_*`/`repack_mink` —
 swap `Title=` → ASCII, re-compress; the strings the engine's Settings list + Preview show); `rename_map`
 bulk-renames files by a substring map + rewrites refs in lockstep. **The translation surface is COMPLETE** —
-all PE-resource UI, all hardcoded/runtime JP, the themed calculators (`calmain.nut` + button PNGs), the
+all PE-resource UI, all hardcoded/runtime JP, gcal.exe's 3 custom-drawn toolbar buttons (更新/表示設定/動作設定 →
+Refresh/View/Options via `asmpoke`), the themed calculators (`calmain.nut` + button PNGs), the
 wallpaper picker (84 JPGs + HTML refs ASCII'd; 壁紙の設定方法/壁紙一覧/モニターサイズ header images retexted),
 the 4 screensaver filenames (= their Display-Properties names), and the 5 MinkIt mascot Titles (Konata/
 Kagami/Chihaya/Makoto/Yayoi) are EN. Held back (recorded, non-text): the `CreateFontA` facenames

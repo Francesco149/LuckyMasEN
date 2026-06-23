@@ -37,6 +37,9 @@
           qemu                                 # validation-VM loop + qemu-img / qemu-nbd
           # — archives / installer cracking —
           p7zip cabextract innoextract unzip
+          libarchive        # bsdtar — unpack the innounp .rar during tool auto-fetch (tools/make_iso.py)
+          curl              # tool auto-download (pinned + sha256) for make_iso.py
+          xorriso           # ISO9660/Joliet writer — the patched-disc output when pycdlib is absent (make_iso.py)
           # — python format-RE env —
           py
           # — misc —

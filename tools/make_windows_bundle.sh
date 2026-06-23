@@ -93,4 +93,4 @@ rm -f "$zip_out"
 echo ">> done"
 du -sh "$stage" | sed 's/^/   staged: /'
 ls -l "$zip_out" | sed 's/^/   zip:    /'
-echo "   contents:"; bsdtar -tf "$zip_out" | sed 's/^/     /' | head -40
+echo "   contents:"; bsdtar -tf "$zip_out" | sed -n '1,40{s/^/     /;p}'   # cap in sed (no | head -> no SIGPIPE under pipefail)

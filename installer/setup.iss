@@ -95,8 +95,15 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 ; The app tree -> {app}.  Launch.ini.org (stale JP backup) is excluded.
 Source: "{#Src}\app\*"; DestDir: "{app}"; Excludes: "launcher\Launch.ini.org"; Flags: recursesubdirs ignoreversion
-; Screensavers -> system32 (the screensaver subsystem enumerates there).
+; Screensavers -> system32 (the subsystem enumerates there).  The engine .scr (one binary, 4 EN names)
+; force-replaces any broken disc stub (ignoreversion); the rest -- each "<name> dir\" working folder
+; (saver.dat + saver.swf + support files; the engine derives its dir from its own filename) and
+; Macromed\Flash\Flash8.ocx -- ships only when screensaver_restore.py has run (versionless data, so no
+; ignoreversion: Inno warns it's unsafe in {sys}).  The disc shipped only the gutted engine; the working
+; content comes from SYGNAS's apology installers (downloaded at build, never committed -- see
+; tools/screensaver_restore.py + docs/screensaver-re.md).
 Source: "{#Src}\sys\*.scr"; DestDir: "{sys}"; Flags: ignoreversion
+Source: "{#Src}\sys\*"; DestDir: "{sys}"; Excludes: "*.scr"; Flags: recursesubdirs
 ; MS PGothic — bundled (dontcopy) so [Code] can AddFontResource it for the wizard + install it to {fonts}.
 Source: "{#FontFile}"; DestDir: "{tmp}"; Flags: dontcopy
 ; gcal-xp server + its editable request-logic script -> {app}\gcal-xp (the cert is embedded in the EXE).
@@ -163,6 +170,12 @@ Filename: "{app}\copy\MinkIt.ini"; Section: "Path"; Key: "Folder"; String: "{app
 ; credential blob is what stops the original launcher hanging on the first calendar check.)
 
 [Run]
+; (0) Register the Flash Player 8 ActiveX the screensavers drive (only when restored into the tree).
+;     The .scr create the Flash control by CLSID {D27CDB6E-...}; without this they show the
+;     "screensaver is corrupted" error.  Left registered on uninstall (a shared system component).
+#if FileExists(AddBackslash(SourcePath) + Src + "\sys\Macromed\Flash\Flash8.ocx")
+Filename: "{sys}\regsvr32.exe"; Parameters: "/s ""{sys}\Macromed\Flash\Flash8.ocx"""; Flags: runhidden; StatusMsg: "Registering Flash Player (for the screensavers)..."
+#endif
 ; (1) Trust the server's www.google.com/localhost cert, as admin, into LocalMachine\Root — silent,
 ;     no protected-root modal (the cert is embedded in gcalsrv.exe).  (2) Start the server now, as
 ;     the logged-in user, so its tray icon appears in their session (it autostarts on later logins

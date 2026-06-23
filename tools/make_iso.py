@@ -11,10 +11,11 @@ copyrighted files stay on your machine; we ship only the patch + this tool).
 What it does, end to end (each step is a small, separately-runnable tool):
   1. innoextract  YOUR setup.exe                 -> the installed app tree   (the only SYGNAS input)
   2. build_patch  the app tree                   -> out/patched/  (the English delta from patch/)
-  3. get_font     YOUR MS PGothic                -> out/font/msgothic.ttc    (Microsoft font; you supply it)
-  4. innounp      YOUR setup.exe (embedded\*)    -> out/og-extract/  (the faithful Lucky*Star wizard art)
-  5. ISCC         installer/setup.iss            -> out/iss-build/setup.exe  (the English installer)
-  6. pycdlib      setup.exe + autorun + icon     -> out/LuckyMas-EN.iso  (+ a .zip of just the installer)
+  3. screensaver_restore  archive.org installers -> out/patched/sys/  (the working .scr content + Flash 8)
+  4. get_font     YOUR MS PGothic                -> out/font/msgothic.ttc    (Microsoft font; you supply it)
+  5. innounp      YOUR setup.exe (embedded\*)    -> out/og-extract/  (the faithful Lucky*Star wizard art)
+  6. ISCC         installer/setup.iss            -> out/iss-build/setup.exe  (the English installer)
+  7. pycdlib      setup.exe + autorun + icon     -> out/LuckyMas-EN.iso  (+ a .zip of just the installer)
 
 Cross-platform with minimal friction (see docs/end-user-build.md):
   * Windows : ISCC + innounp run NATIVELY (no wine). innoextract is auto-fetched.
@@ -77,6 +78,7 @@ def step(msg):
     print("\n" + _c("1;36", f"[{_STEP[0]}] {msg}"), flush=True)
 def info(msg):  print(f"    {msg}", flush=True)
 def ok(msg):    print("    " + _c("32", "+") + f" {msg}", flush=True)
+def warn(msg):  print("    " + _c("33", "!") + f" {msg}", flush=True)
 def die(msg, *, hint=None):
     print("\n" + _c("1;31", "Error:") + f" {msg}", file=sys.stderr)
     if hint:
@@ -242,6 +244,29 @@ def stage_patch(originals_parent, out_patched):
     py(TOOLS / "build_patch.py", "--originals", originals_parent, "--out", out_patched)
     ok(f"patched tree -> {out_patched}")
 
+def stage_screensavers(out_patched, *, offline, skip):
+    """Restore the four working screensavers into out/patched/sys (download+extract; never committed).
+
+    Non-fatal: if the apology installers can't be fetched, we WARN and ship the (broken) disc .scr as
+    before — the rest of the installer is unaffected.  setup.iss includes the restored content + Flash
+    registration only when present (#if FileExists)."""
+    step("Restore the working screensavers (screensaver_restore.py)")
+    if skip:
+        info("--skip-screensavers: leaving the disc .scr as-is (non-functional without their content)")
+        return
+    cmd = [sys.executable, str(TOOLS / "screensaver_restore.py"),
+           "--out-sys", str(out_patched / "sys"), "--cache", str(CACHE)]
+    if offline:
+        cmd.append("--offline")
+    info("$ " + " ".join(cmd))
+    r = subprocess.run(cmd)
+    if r.returncode != 0:
+        warn("screensaver restore failed -- the installer will ship the disc's non-working .scr.")
+        warn("Re-run with network access (sources: archive.org/details/lucky-mas-screensavers),")
+        warn("or pass --skip-screensavers to silence this.")
+    else:
+        ok("screensavers + Flash 8 restored into the patched tree")
+
 def stage_font(font_arg, out_font):
     step("Normalise your MS PGothic (get_font.py)")
     if out_font.exists() and font_arg in (None, "auto", "keep") and out_font.stat().st_size > 100_000:
@@ -350,6 +375,8 @@ def main(argv):
     ap.add_argument("--innounp", help="path to innounp.exe (else discovered / auto-downloaded)")
     ap.add_argument("--innoextract", help="path to innoextract (else PATH / auto-downloaded)")
     ap.add_argument("--offline", action="store_true", help="never download; only use cached/PATH tools")
+    ap.add_argument("--skip-screensavers", action="store_true",
+                    help="don't restore the working screensavers (ship the disc's non-functional .scr)")
     ap.add_argument("--keep-work", action="store_true", help="keep the temp extract dir")
     ap.add_argument("--no-iso", action="store_true", help="stop after the installer (skip ISO/ZIP)")
     args = ap.parse_args(argv)
@@ -383,6 +410,7 @@ def main(argv):
 
     originals_parent = stage_extract(setup_exe, work, innoextract)
     stage_patch(originals_parent, out_patched)
+    stage_screensavers(out_patched, offline=args.offline, skip=args.skip_screensavers)
     stage_font(args.font, out_font)
     stage_wizard_art(setup_exe, out / "og-extract", innounp)
     out_setup = out / "iss-build" / "setup.exe"

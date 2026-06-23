@@ -20,6 +20,29 @@ toolchain bundles a **builder-supplied** copy of the font ([`tools/get_font.py`]
 `installer/setup.iss`), `AddFontResource`-d for the wizard and installed for the app's serifs — rendering
 correctly even on an XP with no East-Asian fonts (shown above, validated on the q9650 test box).
 
+## Build your own English disc (one command)
+
+You own the SYGNAS disc; this turns it into an **English** one. Give it your disc's `setup.exe` and your
+own MS PGothic — out comes `LuckyMas-EN.iso` (a drop-in English disc image) and a `LuckyMas-EN.zip`.
+Nothing here redistributes a SYGNAS or Microsoft file. Full guide: [`docs/end-user-build.md`](docs/end-user-build.md).
+
+```sh
+# Windows — unzip LuckyMasEN-builder-win.zip, then (runs Inno Setup natively, no wine):
+build.bat --setup D:\setup.exe --font auto
+
+# Linux (Nix):
+nix run github:Francesco149/LuckyMasEN#iso -- --setup ~/setup.exe --font auto
+
+# anywhere with Python + innoextract (+ wine on Linux):
+python tools/make_iso.py --setup ~/setup.exe --font auto
+```
+
+One engine ([`tools/make_iso.py`](tools/make_iso.py)) drives it everywhere: `innoextract` reads the app
+tree straight out of your `setup.exe`, [`build_patch.py`](tools/build_patch.py) applies the English delta,
+the faithful wizard art is pulled from your `setup.exe`, ISCC recompiles the installer, and the disc image
+is written with pycdlib/xorriso. The freeware build tools (Inno Setup, innounp, innoextract) are
+auto-downloaded pinned + SHA-256-verified (the Windows bundle pre-seeds them, so it builds offline).
+
 ## Demo — the mascots run their own calendar, no Google account
 
 | `SerifCallenderSchedule` — today's events | `SerifCallenderNone` — empty calendar |

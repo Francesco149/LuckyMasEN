@@ -79,6 +79,21 @@ Short SHA-256 prefixes; full hashes are in the manifest below.
 | `app/calc/WinCalcImas.exe` | 102,400 | 2007-11-30 | `12f9016ab787…` |
 | `app/calc/WinCalcLucky.exe` | 102,400 | 2007-11-30 | `229b9e9efc08…` |
 
+### Screensavers — one binary, four names
+
+The four `sys/*.scr` files are **byte-identical** (the same SHA-256, 198 KiB each) — a single
+screensaver binary shipped under four filenames. Because a `.scr`'s filename *is* its
+Display-Properties label, that one binary surfaces as four separate entries in the Screen Saver list:
+`らき☆マス：アイマス3D` · `らき☆マス：アイマスコミック` · `らき☆マス：らき☆すたコミック` · `らき☆マス：ちびキャラズ`
+(the English build renames them to *LuckyMas - iM@S 3D / iM@S Comic / Lucky Star Comic / Chibi Characters*).
+
+They are **not referenced or launched by any executable or HTML page** — `.scr` appears in none of the
+binaries, INIs, or pages, and the launcher menu has no screensaver entry. They reach the user purely
+through Windows' own mechanism: the installer copies them to `{sys}` (system32), where the screensaver
+subsystem enumerates them, and the disc's readme directs the user to **Control Panel ▸ Display ▸ Screen
+Saver**. The launcher's only related item is a generic Display-Properties shortcut (`Exec009 =
+{sys}\desk.cpl`) — the same applet — never a specific `.scr`.
+
 ### Full file manifest (SHA-256)
 
 Paths are relative to the install root. To check your own extracted/installed tree, save this block

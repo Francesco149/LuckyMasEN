@@ -585,10 +585,20 @@ Worked the 5 RE items. **3 done + committed**, 2 deferred to an XP-supervised se
    (TextOutW x AND the `unaff_ESI[...]` rect stores) + probably widen the title bar. Beyond the in-place
    `binpatch` op (needs a .text/.rdata immediate-patcher + cave allocator); layout (overlap/fit) only checkable
    on XP. (表示設定→calendar-select modal; 動作設定→GoogleAccount dialog.)
-5. **MinkIt About/Preview "URL" control nudge — NO blind change; geometry is already clean.** Dumped the rects
-   (`python tools/pe_res.py geom out/patched/app/copy/MinkIt.exe PREVIEWDLG ABOUTDLG`): PREVIEWDLG value fields
-   #0/#1/#2 are aligned at x=40, end at x+cx=180
-   in a 183-wide dialog (3 px margin); labels end at 39 (1 px gap). ABOUTDLG has no URL static (just `(C)JAK`,
-   `MINKIT`, version, 2 runtime Edits w/ margin). The Session-13 "move URL left 2px" was a hypothesis (rects
-   un-dumped); a blind −2 px would OVERLAP the "URL:" label + break #0/#1/#2 alignment. **Needs an XP screenshot
-   to identify the actual clipped control before any change** (owner-driven visual call).
+5. **MinkIt About URL clip — FIXED (commit `a2e5fff`), render-verify pending.** The dialog rects
+   (`python tools/pe_res.py geom out/patched/app/copy/MinkIt.exe ABOUTDLG`) plus an on-XP screenshot
+   (q9650, 2026-06-23) showed the clip is in **ABOUTDLG's two runtime Edits** — #4 author website
+   (`http://www.ichigo-cafe.com/`) + #5 email (`jak@ichigo-cafe.com`), JP-sized at x=33/34 cx=77 (ending
+   x+cx=110/111 in a 123-wide dialog) → both clipped to `…cafe.cor`. (Not PREVIEWDLG — those value fields
+   are already clean at x+cx=180 in a 183-wide dialog.) `[pe_res.layout.ABOUTDLG]` widened them to x=31
+   cx=89 (x+cx=120). Render-verify on timemachine (q9650's CRT is off → captures are black).
+
+## Session 14 (cont.) — autonomous on-XP testing set up; overnight handoff written
+On-XP access is now **agent-less** (the `xphttpd` :8099 agent is retired): `netexec` exec + `smbclient`
+files + `iexec.exe` for console-session GUI/screenshots. **Screenshot reality** (proven live): BitBlt
+(`savescreenshotfull`/`win`) returns **black** when the framebuffer is off — the **q9650's CRT powers
+off**, so visual tests must run on **timemachine (LCD, currently JP locale)** via **PrtScn→clipboard**.
+The full method + boxes + boot ladder + the per-item overnight plan (deploy+verify items 1/4/5, implement
+item 2) live in the **private hardware repo** (see CLAUDE.md §"Deploy + test live on the XP box") —
+`projects/minkit-en-patch/{xp-ops-cheatsheet.md, OVERNIGHT-HANDOFF.md, deploy-xp.sh}`. Item 5's geometry
+fix + items 1/3/4 are committed here; the overnight session deploys the fresh build and confirms on XP.

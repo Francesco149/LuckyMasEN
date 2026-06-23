@@ -22,16 +22,19 @@ purpose so the served cert == the cert installed in XP's Root, byte-for-byte.
 ## Deploy + test live on the XP box → see `../retro-hardware` (don't reinvent it here)
 You don't deploy/drive XP from this repo — the full, current, private recipe lives in the hardware repo:
 - **`../retro-hardware/projects/minkit-en-patch/`** — LuckyMas-specific ops: **`deploy-xp.sh`**
-  (`probe`/`launcher`/`server`/`hosts`/`launch`/`shot`; reads this repo's `out/patched` + `tools/gcal-xp/`,
-  override `LM_REPO=`), **`xp-ops-cheatsheet.md`** (the agent-less **SMB-exec + `iexec`** recipe — deploy,
-  drive the GUI, screenshot the **layered** mascot via **PrtScn→clipboard** not BitBlt, gcalsrv lifecycle,
-  silent SYSTEM cert install), **`lm.cmd`** (on-XP launcher driver → ASCII `C:\lm`).
+  (`probe`/`launcher`/`copy`/`server`/`hosts`/`launch`/`shot`/`winshot`; reads this repo's `out/patched` +
+  `tools/gcal-xp/`, override `LM_REPO=`/`XP_IP=`), **`xp-ops-cheatsheet.md`** (the **agent-less** recipe —
+  `netexec` exec + `smbclient` files + `iexec.exe` console GUI; the **boxes**, the **boot ladder**, gcalsrv
+  lifecycle, silent SYSTEM cert install), **`OVERNIGHT-HANDOFF.md`** (the autonomous per-item test plan).
+  ⚠️ **Screenshots:** BitBlt (`savescreenshotfull`/`win`) = **BLACK** when the monitor is off — the **q9650's
+  CRT powers off** → do visual tests on **timemachine (LCD, JP locale)** via **PrtScn→clipboard**.
 - **`../retro-hardware/HANDOFF.md`** + **`projects/xp-remote-probe/`** — fleet/access + the agent-less
-  control stack (`iexec` GUI launch via `netexec --exec-method smbexec`). XP build:
-  **`builds/time-machine-asbuilt.md`**.
-- Gist: the XP box runs **one OS at a time** (reach it over SMB; it's offline while in its other OS); app
-  install root `C:\Program Files\SYGNAS\らき☆マス\{copy,launcher,calc,wallpaper}`; loop the owner in only for
-  visual judgment a screenshot can't settle, or physical actions. **Everything specific lives in retro-hardware.**
+  control stack (`iexec` GUI via `netexec --exec-method smbexec`; the old `xphttpd` :8099 agent is RETIRED).
+  XP build: **`builds/time-machine-asbuilt.md`**.
+- Gist: each XP box runs **one OS at a time** (reach it over SMB; offline while in its other OS). **q9650**
+  = `10.0.10.134`, EN, no-WoL, CRT (capture-black); **timemachine** = `.113/.114/.115`, WoL-able, LCD, JP.
+  EN install root `C:\Program Files\SYGNAS\LuckyMas\{copy,launcher,calc,wallpaper}`. Loop the owner in only
+  for visual judgment a screenshot can't settle, or physical actions. **Everything specific lives in retro-hardware.**
 
 ## Building XP binaries (i686, XP subsystem)
 Cross-compile with mingw-w64 via nix (works in `nix develop`):

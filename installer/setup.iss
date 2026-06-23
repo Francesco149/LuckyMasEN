@@ -138,8 +138,9 @@ Name: "{userdesktop}\Lucky Mas Launcher"; Filename: "{app}\launcher\Launch.exe";
 ; A default mascot (Konata Izumi) so one appears immediately; her folder = the launcher dir (the .Xvi).
 Filename: "{app}\launcher\Launch.ini"; Section: "Data"; Key: "Folder"; String: "{app}\launcher"
 Filename: "{app}\launcher\Launch.ini"; Section: "Data"; Key: "Chara"; String: "konata.Xvi"
-; Check the (local) Google calendar on startup -- safe now that the account is pre-seeded (no hang).
-Filename: "{app}\launcher\Launch.ini"; Section: "Calendar"; Key: "Boot"; String: "1"
+; Calendar check on startup defaults OFF -- so the "you've got mail" bubble (below) is what greets
+; the user on first boot. Toggle it on in the launcher's settings (the account is pre-seeded, no hang).
+Filename: "{app}\launcher\Launch.ini"; Section: "Calendar"; Key: "Boot"; String: "0"
 ; The "you've got mail" bubble opens this email client (Outlook Express ships on every XP).
 Filename: "{app}\launcher\Launch.ini"; Section: "Mail"; Key: "Client"; String: "{pf}\Outlook Express\msimn.exe"
 ; A POP3 profile (#1) pointed at the local gcal-xp server so the mail bubble works OOB. The server

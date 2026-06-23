@@ -361,13 +361,17 @@ note = "MinkIt.exe config — ABOUTDLG / PREVIEWDLG / SETUPDLG"
 0 = { x = 40, cx = 140 }   # Title value field
 1 = { x = 40, cx = 140 }   # Author value field
 2 = { x = 40, cx = 140 }   # URL value field
-# ABOUTDLG layout: the author website (#4) + email (#5) read-only Edits (x=33/34, cx=77, ending
-# x+cx=110/111 in a 123-wide dialog) clip "http://www.ichigo-cafe.com/" -> "...cafe.cor" and
-# "jak@ichigo-cafe.com" -> "...cafe.cor" (confirmed on XP, 2026-06-23). Nudge left 2px + widen to
-# x+cx=120 (3px margin) so the full URL/email show. (Verify/fine-tune render on timemachine.)
+# ABOUTDLG layout: the author website (#4) + email (#5) read-only Edits clip the long URL
+# "http://www.ichigo-cafe.com/" (27 chars) on the right. The original 123-wide dialog is too
+# narrow to hold a field that long — a nudge within it (the old x=31 cx=89) only fit the URL in
+# the NARROW JP font on timemachine; the wider EN font on the q9650 still clipped. Fix: WIDEN THE
+# DIALOG (cx 123->175) and the two URL Edits to cx=143 (x+cx=170, 5px margin) so the full URL/email
+# show in any locale font; re-center the OK button in the wider dialog. (Verified on XP 2026-06-23.)
 [pe_res.layout.ABOUTDLG]
-4 = { x = 31, cx = 89 }    # author website URL Edit (was x=33 cx=77)
-5 = { x = 31, cx = 89 }    # author email Edit (was x=34 cx=77)
+dialog = { cx = 175 }      # widen (was 123) so a full-URL-width field fits
+0 = { x = 62 }             # re-center OK button (50 wide) in the 175-wide dialog
+4 = { x = 27, cx = 143 }   # author website URL Edit -> http://www.ichigo-cafe.com/ (was x=31 cx=89)
+5 = { x = 27, cx = 143 }   # author email Edit (was x=31 cx=89)
 
 # WinCalc.exe — base calculator (NOT launched by the launcher; it runs the themed
 # WinCalcImas/Lucky, whose UI is .nut-scripted behind the un-cracked codec — deferred).

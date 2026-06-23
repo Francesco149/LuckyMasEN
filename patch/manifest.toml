@@ -326,6 +326,13 @@ note = "MinkIt.exe config — ABOUTDLG / PREVIEWDLG / SETUPDLG"
 0 = { x = 40, cx = 140 }   # Title value field
 1 = { x = 40, cx = 140 }   # Author value field
 2 = { x = 40, cx = 140 }   # URL value field
+# ABOUTDLG layout: the author website (#4) + email (#5) read-only Edits (x=33/34, cx=77, ending
+# x+cx=110/111 in a 123-wide dialog) clip "http://www.ichigo-cafe.com/" -> "...cafe.cor" and
+# "jak@ichigo-cafe.com" -> "...cafe.cor" (confirmed on XP, 2026-06-23). Nudge left 2px + widen to
+# x+cx=120 (3px margin) so the full URL/email show. (Verify/fine-tune render on timemachine.)
+[pe_res.layout.ABOUTDLG]
+4 = { x = 31, cx = 89 }    # author website URL Edit (was x=33 cx=77)
+5 = { x = 31, cx = 89 }    # author email Edit (was x=34 cx=77)
 
 # WinCalc.exe — base calculator (NOT launched by the launcher; it runs the themed
 # WinCalcImas/Lucky, whose UI is .nut-scripted behind the un-cracked codec — deferred).

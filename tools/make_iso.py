@@ -46,20 +46,20 @@ PINS = {
     "innosetup": {  # the Inno Setup compiler (ISCC.exe) — extracted with innoextract, never run as an installer
         "version": "5.6.1",
         "url": "https://files.jrsoftware.org/is/5/innosetup-5.6.1.exe",
-        "sha256": "",
+        "sha256": "96fd6a5eaab473c61a19affff89618764b940ee3f15837c2944a5595aed5fde6",
         "kind": "innosetup",  # extract via innoextract, then find ISCC.exe
     },
     "innounp": {  # extracts the embedded wizard art from the user's setup.exe
         "version": "0.50",
         "url": "https://downloads.sourceforge.net/project/innounp/innounp/innounp%200.50/innounp050.rar",
-        "sha256": "",
+        "sha256": "1d8837540ccc15d98245a1c73fd08f404b2a7bdfe7dc9bed2fdece818ff6df67",
         "kind": "rar",  # unpack with bsdtar / 7z, find innounp.exe
         "member": "innounp.exe",
     },
     "innoextract": {  # native Windows build (Linux gets it from the distro / nix flake)
         "version": "1.9",
         "url": "https://github.com/dscharrer/innoextract/releases/download/1.9/innoextract-1.9-windows.zip",
-        "sha256": "",
+        "sha256": "6989342c9b026a00a72a38f23b62a8e6a22cc5de69805cf47d68ac2fec993065",
         "kind": "zip",
         "member": "innoextract.exe",
     },

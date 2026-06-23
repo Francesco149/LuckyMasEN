@@ -65,15 +65,20 @@ PINS = {
     },
 }
 
-# ── tiny logging ─────────────────────────────────────────────────────────────────────────────
+# ── tiny logging (ASCII + encoding-safe; ANSI only on a real *nix TTY) ─────────────────────────
+for _s in (sys.stdout, sys.stderr):
+    try: _s.reconfigure(encoding="utf-8", errors="replace")   # never crash on a cp1252 console
+    except Exception: pass
+_COLOR = sys.stdout.isatty() and os.name != "nt"
+def _c(code, s): return f"\033[{code}m{s}\033[0m" if _COLOR else s
 _STEP = [0]
 def step(msg):
     _STEP[0] += 1
-    print(f"\n\033[1;36m[{_STEP[0]}] {msg}\033[0m", flush=True)
+    print("\n" + _c("1;36", f"[{_STEP[0]}] {msg}"), flush=True)
 def info(msg):  print(f"    {msg}", flush=True)
-def ok(msg):    print(f"    \033[32m✓\033[0m {msg}", flush=True)
+def ok(msg):    print("    " + _c("32", "+") + f" {msg}", flush=True)
 def die(msg, *, hint=None):
-    print(f"\n\033[1;31mError:\033[0m {msg}", file=sys.stderr)
+    print("\n" + _c("1;31", "Error:") + f" {msg}", file=sys.stderr)
     if hint:
         print(f"\n{hint}", file=sys.stderr)
     sys.exit(1)
@@ -357,7 +362,7 @@ def main(argv):
     out_patched = out / "patched"
     out_font = out / "font" / "msgothic.ttc"
 
-    print(f"\033[1mLuckyMasterEN — building an English patched ISO\033[0m")
+    print(_c("1", "LuckyMasterEN - building an English patched ISO"))
     print(f"  repo:  {REPO}")
     print(f"  input: {setup_exe}")
     print(f"  out:   {out}")
@@ -387,11 +392,11 @@ def main(argv):
         iso_path = out / f"{args.name}.iso"
         zip_path = out / f"{args.name}.zip"
         stage_iso(out_setup, out_patched, iso_path, zip_path, work)
-        print(f"\n\033[1;32mDone.\033[0m  Burn or mount \033[1m{iso_path}\033[0m on your XP box and run setup.exe,")
-        print(f"      or just unzip \033[1m{zip_path}\033[0m and run setup.exe.")
+        print("\n" + _c("1;32", "Done.") + f"  Burn or mount {_c('1', str(iso_path))} on your XP box and run setup.exe,")
+        print(f"      or just unzip {_c('1', str(zip_path))} and run setup.exe.")
         print(f"      sha256(iso) = {_sha256(iso_path)}")
     else:
-        print(f"\n\033[1;32mDone.\033[0m  English installer: {out_setup}")
+        print("\n" + _c("1;32", "Done.") + f"  English installer: {out_setup}")
 
     if not args.keep_work:
         shutil.rmtree(work, ignore_errors=True)

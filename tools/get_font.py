@@ -20,6 +20,10 @@ Output: out/font/msgothic.ttc (validated; out/ is gitignored — never committed
 """
 import argparse, os, shutil, subprocess, sys, tempfile
 
+for _s in (sys.stdout, sys.stderr):           # never crash printing on a cp1252 Windows console
+    try: _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception: pass
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(REPO, 'out', 'font', 'msgothic.ttc')
 
@@ -110,10 +114,12 @@ def validate(path):
         pass
     print(f"  {'TTC collection' if is_ttc else 'single TTF'}, {os.path.getsize(path):,} bytes")
     if 'pgothic' in fams.lower() or 'Ｐゴシック' in fams:
-        print("  contains MS PGothic ✓")
+        print("  contains MS PGothic [ok]")
+    elif not fams.strip():
+        print("  (face name not verified here - no fontconfig; assuming MS PGothic)")
     else:
-        seen = ', '.join(sorted({x for x in fams.split(chr(10)) if x})[:8]) or '(fc-scan saw none)'
-        print(f"  ⚠ MS PGothic face not detected (faces: {seen}) — verify this is msgothic.ttc")
+        seen = ', '.join(sorted({x for x in fams.split(chr(10)) if x})[:8])
+        print(f"  [!] MS PGothic face not detected (faces: {seen}) - verify this is msgothic.ttc")
 
 
 def main(argv):
@@ -144,8 +150,12 @@ def main(argv):
                         ('Fonts/msgothic.ttc', 'fonts/msgothic.ttc', 'Fonts/MSGOTHIC.TTC')) if os.path.exists(p)),
                        None) or find_font(args.windows)
         elif args.from_system:
-            src = next((p for p in ('/mnt/c/Windows/Fonts/msgothic.ttc', '/mnt/c/WINDOWS/Fonts/msgothic.ttc',
-                        'C:/Windows/Fonts/msgothic.ttc') if os.path.exists(p)), None)
+            cands = ['/mnt/c/Windows/Fonts/msgothic.ttc', '/mnt/c/WINDOWS/Fonts/msgothic.ttc',
+                     'C:/Windows/Fonts/msgothic.ttc']
+            win = os.environ.get('WINDIR') or os.environ.get('SystemRoot')   # native Windows (any drive)
+            if win:
+                cands.insert(0, os.path.join(win, 'Fonts', 'msgothic.ttc'))
+            src = next((p for p in cands if os.path.exists(p)), None)
             if not src:
                 sys.exit("no msgothic.ttc in the usual system Fonts dir — use --ttf/--windows/--langpack")
         else:  # --langpack

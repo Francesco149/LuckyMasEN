@@ -1,22 +1,16 @@
 # Next builds — calendar emulator + XP remote probe
 
-Two builds greenlit 2026-06-21 to enable autonomous, no-physical-access work on the XP Time Machine.
-Both are wslop-side to write; the one-shot boot-loop (below) is in place to test them against real XP.
+Two builds greenlit 2026-06-21 to enable autonomous, no-physical-access work on the XP test box.
+Both are dev-box-side to write; the test rig (below) is in place to test them against real XP.
 **This doc is self-contained** (written before a `/clear`) — it captures the RE + design needed to execute.
 
 ## Operational context — reaching & driving the box
-- The **Time Machine** runs ONE OS at a time. Default boot = NixOS courier `timemachine`
-  (`ssh root@timemachine.soy`, key auth `headpats@cutestation`; reachable only while the box is in NixOS).
-- **Flip into XP:** on the courier run `/root/boot-xp-once.sh` (= `grub-reboot "Windows XP (Crucial)"` +
-  `systemctl reboot`). Boots XP exactly once; any XP shutdown/reboot returns to NixOS (one-shot consumed
-  at the GRUB stage). Validated 2026-06-21.
-- **Cold-mount the XP disk** (only while the box is in NixOS / XP cold): **ALWAYS by NTFS UUID** —
-  `mount -t ntfs-3g -o ro|rw /dev/disk/by-uuid/C2DCD5A2DCD59151 /run/xp…` (the disk re-letters sda↔sdb
-  across reboots — never use `sdX`). XP install root → `…/Program Files/SYGNAS/らき☆マス/{copy,launcher,calc,wallpaper}`.
-- Kit master (wslop): `/mnt/c/Users/headpats/Documents/retro-machines/z97x-timemachine/retro-drivers`;
-  courier mirror `/var/lib/retro-kit`; XP on-disk kit = `C:\retro-kit\` (flattened).
-- Offline hive edits: `nix shell nixpkgs#hivex -c hivexregedit --merge --prefix '…' <hive> <reg>`
-  (works on wslop + courier; `hivexget` is reliable on wslop, flaky on the courier — pull hives to wslop to read).
+- The **XP test box** runs ONE OS at a time, reachable only while it is in its NixOS state.
+- It can be flipped into XP and back, booting XP exactly once; any XP shutdown/reboot returns to NixOS.
+- **Cold-mount the XP disk** is available only while the box is in NixOS / XP cold. XP install root →
+  `…/Program Files/SYGNAS/らき☆マス/{copy,launcher,calc,wallpaper}`.
+- A driver/tooling kit is staged on the box's disk for offline install.
+- Offline registry-hive edits are available while the box is in NixOS / XP cold.
 
 ## Build 1 — Calendar synthetic test-board (start here)
 Make the launcher's calendar (and mail) speech bubbles fire on command, to verify every translated
@@ -56,44 +50,40 @@ server, with a **scenario selector** (env var / control file / path) to choose t
 bubble. **First-cut + a request LOGGER**, so the first real-XP run captures the exact event-feed URL/params +
 the XML the parser actually needs, then we lock the responses. Redirect: XP `hosts` `www.google.com →
 <emu-host-IP>` (⚠️ also blackholes real google.com browsing on XP — fine for a retro box; toggle when
-testing). **⚠️ corrected: run on a SEPARATE always-on LAN box, NOT the courier** — the Time Machine runs
-one OS at a time, so its NixOS courier is offline while XP is booted (and XP reuses its NIC/lease, so the
-courier IP would loop back to XP). Needs port 80 free.
+testing). **⚠️ corrected: run on a SEPARATE always-on box, NOT the XP box** — the XP box runs
+one OS at a time, so it's offline while XP is booted (and XP reuses its NIC/lease). Needs port 80 free.
 
 ## Build 2 — XP remote probe (screen capture + push) — cold-loop
-Push files to XP + observe (screenshots) with no physical access, driven from the courier. Robust design
-that reuses the proven cold-mount + boot-loop and needs **no live network agent**:
-1. Courier cold-mounts XP (by UUID), writes the inputs (patched files) + a task descriptor.
-2. Courier runs `boot-xp-once.sh` → reboots into XP.
-3. XP **autologons** (Administrator) → a **Startup orchestrator** runs the task: launch the app, fire
-   actions, **NirCmd `savescreenshot`** → `C:\probe\out\`, then `shutdown -r -t 0` → one-shot consumed →
-   back to NixOS.
-4. Courier returns, cold-mounts XP, reads `C:\probe\out\` → analyze.
+Push files to XP + observe (screenshots) with no physical access. Robust design
+that reuses the proven cold-mount + boot mechanism and needs **no live network agent**:
+1. Cold-mount XP, write the inputs (patched files) + a task descriptor.
+2. Flip the box into XP.
+3. XP **autologons** → a **Startup orchestrator** runs the task: launch the app, fire
+   actions, **NirCmd `savescreenshot`** → `C:\probe\out\`, then reboot → back to NixOS.
+4. Cold-mount XP again, read `C:\probe\out\` → analyze.
 
 **Pieces to stage (all offline-installable now while XP is cold):**
 - **NirCmd** — NOT in the kit; fetch from nircmd.com (Playwright if the DL is gated) → `C:\probe\nircmd.exe`.
-- **Autologon** — SOFTWARE hive `…\Microsoft\Windows NT\CurrentVersion\Winlogon`: `AutoAdminLogon=1`,
-  `DefaultUserName=Administrator`, `DefaultPassword=…`. ✅ **Resolved 2026-06-21: Administrator password is
-  BLANK** (offline `samdump2` → NT hash `31d6…089c0`; owner-confirmed) → leave `DefaultPassword` empty.
+- **Autologon** — the SOFTWARE hive's Winlogon key (`AutoAdminLogon=1` etc.).
 - **Startup orchestrator** — a batch in `…\Documents and Settings\All Users\Start Menu\Programs\Startup\`
-  that, **only when a flag file exists** (so normal boots aren't hijacked), runs `C:\probe\task.cmd` (dropped
-  by the courier) + screenshots + reboots.
-- **Courier orchestrator** — a script doing steps 1–4 (mount/write/arm/reboot; on return mount/read).
+  that, **only when a flag file exists** (so normal boots aren't hijacked), runs `C:\probe\task.cmd`
+  + screenshots + reboots.
+- **Orchestrator** — a script doing steps 1–4 (mount/write/arm/reboot; on return mount/read).
 
 **Optional later upgrade (live agent):** portable sshd (Bitvise WinSSHD) installed on first boot via the
 orchestrator → live SFTP+exec on running XP (no reboot per change). Defer until the cold-loop works.
 
 ## State at this `/clear` (2026-06-21)
-- **LuckyMas:** 22-char EN launcher translation **deployed** to XP (originals backed up
-  `courier:/root/luckymas-launcher-orig.20260621-202727`; owner confirmed names + one speech line render in
+- **LuckyMas:** 22-char EN launcher translation **deployed** to XP (originals backed up;
+  owner confirmed names + one speech line render in
   English). Formats MINK/ACZ/PACKDATA cracked; `tools/` = `sygnas_unpack.py` / `sygnas_repack.py` /
   `build_launcher_en.py`; `patch/launcher/*.ini`. Calc `.nut` + `.mink` sprite codecs deferred (don't gate TL).
 - **Shutdown SOLVED:** Creative Audigy autostarts (`CTSysVol` + `Module Loader/DLLML`) parked → instant
-  (revert: re-merge from `Run-LMparked`, or restore `courier:/root/xp-SOFTWARE.bak.20260621-210113`).
+  (revert: re-merge from `Run-LMparked`, or restore the SOFTWARE-hive backup).
   `verbosestatus=1` + per-user app-kill timeouts (2000/1000/AutoEndTasks=1) also set.
-- **One-shot boot-loop done + validated** (`courier:/root/boot-xp-once.sh`).
+- **One-shot boot mechanism done + validated.**
 - **SMBus INF deployed but the boot "new hardware" wizard still appears** — needs a manual Device-Manager
-  install from `C:\retro-kit\chipset-inf\`, or it's a *different* undriven device (iGPU/xHCI → BIOS-disable). Deferred.
+  install from the on-disk chipset-inf kit, or it's a *different* undriven device (iGPU/xHCI → BIOS-disable). Deferred.
 - **Open LuckyMas TL surface:** PE-resource UI strings (dialogs/menus/string-tables, lang 1041 → `lief`),
   `Launch.ini` titles + wallpaper HTML (trivial text); then route A/B lock-in.
 
@@ -107,25 +97,23 @@ add-event `…/calendar/event?action=TEMPLATE&dates=%4d%02d%02d/…`.)
 - **Build 1 — gcal-emu** → `LuckyMasterEN/tools/gcal-emu/` (`gcal_emu.py` + README). Stdlib HTTP
   (ClientLogin + both Atom feeds) + POP3, scenario selector (env + control file re-read per request →
   flip bubbles live) + a verbatim request LOGGER. **Self-tested on every scenario** (curl + a POP3
-  client): schedule/none/error, mail check/none/error/refuse. ⚠️ **runs on a SEPARATE always-on LAN box,
-  not the courier** (the courier IS XP while XP runs); needs port 80 free + on the `10.0.10.x` LAN.
-- **Build 2 — XP remote probe** → `retro-hardware/projects/xp-remote-probe/` (`courier/xp-probe.sh` +
-  `xp/*.cmd|.reg` + README). Deployed to `courier:/root/xp-remote-probe/`; NirCmd staged to the kit
-  (`xp/probe/nircmd.exe`, 32-bit verified). **Validated on the real cold disk (no reboot):** UUID mount
-  guard, case-insensitive resolver, install, status, `hosts on|off`, `autologon on|off` (readback via
-  `hivexregedit --export`; `hivexget` isn't exposed by `nix shell nixpkgs#hivex`), and `check-admin`.
-  Disk left clean (autologon off, no redirect, no flag).
+  client): schedule/none/error, mail check/none/error/refuse. ⚠️ **runs on a SEPARATE always-on box,
+  not the XP box** (the XP box IS XP while XP runs); needs port 80 free + on the same LAN.
+- **Build 2 — XP remote probe** (`xp-probe.sh` + `xp/*.cmd|.reg` + README) — lives in the Windows XP
+  hardware-build repo. NirCmd staged to the kit (`nircmd.exe`, 32-bit verified). **Validated on the real
+  cold disk (no reboot):** the mount guard, case-insensitive resolver, install, status, `hosts on|off`,
+  `autologon on|off` (with readback), and `check-admin`. Disk left clean (autologon off, no redirect, no flag).
 
 **One open step:** the first full cold-loop `arm → reboot → collect` (reboots the box into XP). Gated on
 an owner go-ahead. Recommended first run **owner-supervised** (skip autologon, log in by hand once);
 enable autologon for hands-off runs after the loop is proven. Runbook → the probe README.
 
 ### Hosting + the XP-local direction (2026-06-21)
-The emulator can't run on the Time Machine courier (it *is* XP during the run), so it's wired onto the
-**`code` box behind its Caddy**: `nix-lab/hosts/code/gcal-emu.nix` (a localhost service on
-`lab.ports.gcal-emu`=8091) + a plain-HTTP `http://www.google.com` Caddy vhost → it. XP's hosts redirect
-points `www.google.com → 10.0.10.53` (`code`). Committed + eval/Caddyfile-validated; **needs `deploy .#code`
-to go live.** Calendar-only (POP3 can't be Caddy-fronted → mail deferred).
+The emulator can't run on the XP box itself (it *is* XP during the run), so it's wired onto a
+**separate always-on box behind its reverse proxy**: a localhost service on port 8091 + a plain-HTTP
+`http://www.google.com` vhost → it. XP's hosts redirect points `www.google.com` at that box. Committed +
+eval/config-validated; **needs a deploy to go live.** Calendar-only (POP3 can't be reverse-proxy-fronted →
+mail deferred).
 
 **Build 3 (future, owner-requested):** a **user-friendly XP-local** emulator the end user runs on their
 own XP box (`hosts www.google.com → 127.0.0.1`) to enjoy the mascots' calendar/mail with no Google account
@@ -135,11 +123,11 @@ whatever the request logger captures on the first real run.
 
 ## ✅ Session 2 (2026-06-22) — live-tested; one open piece (HTTPS ClientLogin)
 - **Live-control infra built + proven** (the "optional live agent", done — details in the probe README):
-  a tiny **curl agent `xphttpd`** on XP (runs as Administrator in the interactive session → real
-  screenshots) + **`netexec`/SMB** for clean deploys. The Bitvise-sshd idea was a dead end (deep config
-  rabbit hole) → replaced. This is what made the live recon possible, **no cold-loop reboots**.
-- **gcal-emu reachable from XP** (`code` deployed; hosts-redirect verified; gcal.exe launches + prompts
-  for an account; the **HTTP feeds are ready**).
+  a tiny **HTTP agent** on XP (runs in the interactive session → real screenshots) + **SMB** for clean
+  deploys. The Bitvise-sshd idea was a dead end (deep config rabbit hole) → replaced. This is what made the
+  live recon possible, **no cold-loop reboots**.
+- **gcal-emu reachable from XP** (the always-on box deployed; hosts-redirect verified; gcal.exe launches +
+  prompts for an account; the **HTTP feeds are ready**).
 - **⛔ Open piece — HTTPS ClientLogin (see the corrected protocol above + `re-notes.md` §Session 2):**
   gcal.exe does **TLS** for `/accounts/ClientLogin` (12157). Build an HTTPS `:443` endpoint for
   `www.google.com` with an **XP-trusted self-signed cert + XP-SP3 TLS** (TLS1.0/AES-CBC). Then the feeds
@@ -153,11 +141,11 @@ server natively on XP itself** (the end-user deliverable, was "Build 3, future")
 - **TLS becomes trivial by construction.** On XP the server speaks **Schannel** and gcal.exe's client is
   **WinINet** — the *same* 2007 stack → the handshake is period-accurate with no SECLEVEL hacks, no
   "will Go/Python negotiate XP's handshake", no ancient ciphers to coerce: they're already there.
-- **The code-hosting route kept fighting infra:** `code`'s Caddy **wildcard-binds `*:80`/`*:443`**, so even
-  a secondary IP (`10.0.10.54`) can't take `:443`. On XP, `hosts → 127.0.0.1` and our server owns
+- **The remote-hosting route kept fighting infra:** the always-on box's reverse proxy **wildcard-binds
+  `*:80`/`*:443`**, so even a secondary IP can't take `:443`. On XP, `hosts → 127.0.0.1` and our server owns
   `127.0.0.1:{80,443,110}` with nothing else there → the whole hosting apparatus evaporates.
 - It's the actual product (no Google account) and kills the separate-always-on-box requirement + the
-  POP3-can't-be-Caddy-fronted limitation in one move.
+  POP3-can't-be-reverse-proxy-fronted limitation in one move.
 
 **De-risked this session — the XP-era handshake works:** a TLS1.0 + RSA-kx **AES128-CBC-SHA** client (XP
 SP3's exact capability) against our **SHA-1/RSA-2048 self-signed `www.google.com`** cert completes and
@@ -165,8 +153,8 @@ returns `Auth=` (local OpenSSL proof; the gcal-emu `--https` listener + `certs/`
 So XP's WinINet will handshake our cert; the native Schannel server reproduces the same.
 
 **Target architecture — one self-contained Win32 EXE (i686, XP subsystem):**
-- plain sockets for **HTTP feeds (:80)** + **POP3 (:110)** — trivial C (`xphttpd` proves the socket
-  scaffolding; the response logic ports straight from `gcal_emu.py`, kept as the protocol oracle).
+- plain sockets for **HTTP feeds (:80)** + **POP3 (:110)** — trivial C (the live HTTP agent proves the
+  socket scaffolding; the response logic ports straight from `gcal_emu.py`, kept as the protocol oracle).
 - **Schannel** for **HTTPS `/accounts/ClientLogin` (:443)** — the one fiddly piece
   (`AcquireCredentialsHandle` → `AcceptSecurityContext` token loop → `Encrypt/DecryptMessage`); only
   debuggable on XP via the live agent (no local loop / debugger). Raw Schannel honors "use XP's own
@@ -176,18 +164,18 @@ So XP's WinINet will handshake our cert; the native Schannel server reproduces t
   credential (no system store needed); **`CertAddEncodedCertificateToStore(ROOT,…)`** installs the public
   cert so WinINet trusts it. **Install into Root by default** (WinINet won't trust self-signed otherwise;
   harmless if gcal.exe ignored cert errors → no separate trust-probe needed).
-- first-run/installer: `hosts: www.google.com → 127.0.0.1`, drop+autostart the EXE (Startup, like xphttpd).
+- first-run/installer: `hosts: www.google.com → 127.0.0.1`, drop+autostart the EXE (Startup).
 
 **Next steps:** (1) make the `.pfx`; (2) plain-socket HTTP/POP3 core (port `gcal_emu.py` responses to C);
-(3) Schannel ClientLogin handshake + in-proc cert install; (4) i686-mingw build (cached on `code` via
-`nix … pkgsCross.mingw32.buildPackages.gcc`), deploy via netexec, drive gcal.exe via the agent, capture
-the Serif bubbles. The `code`-hosted Python path is **retired for the deliverable, kept as the oracle**.
+(3) Schannel ClientLogin handshake + in-proc cert install; (4) i686-mingw build (via
+`nix … pkgsCross.mingw32.buildPackages.gcc`), deploy to XP, drive gcal.exe via the agent, capture
+the Serif bubbles. The remote-hosted Python path is **retired for the deliverable, kept as the oracle**.
 
 ## ✅ Session 4 (2026-06-22) — native server BUILT + Schannel PROVEN on real XP
 Steps 1–3 + the build of step 4 are **done**: `tools/gcal-xp/gcalsrv.c` (one self-contained 80 KB i686 EXE)
 serves HTTP feeds :80 + POP3 :110 (Winsock) + **HTTPS ClientLogin :443 (Schannel)**, cert embedded as an
 XP-legacy PKCS#12 (`cert_pfx.h`). Cross-built via `build.sh` (mingw + nix), deployed + driven on
-**10.0.10.113 via SMB-exec (netexec)**. **Validated live:** a real XP WinINet client (`MSXML2.XMLHTTP` =
+**a real XP box via SMB-exec**. **Validated live:** a real XP WinINet client (`MSXML2.XMLHTTP` =
 gcal.exe's stack, `test/clientlogin.vbs`) completes the **Schannel handshake**, **trusts** the self-signed
 cert, and gets `Auth=` from ClientLogin (`STATUS=200`); HTTP feeds + POP3 also verified. Full build log,
 the five bugs fixed (legacy-PKCS12, mcfgthread/XP-safety, protected-root modal, handshake-crash, SYSTEM
@@ -218,9 +206,9 @@ automation). Server side is done + validated; this phase is the patch + the rest
    client/host to drive `SerifMail*` against gcalsrv :110. RE how Launch.exe builds the POP3 host.
 4. Silent (no-modal) cert install (certutil/registry) + a one-click first-run installer (hosts + Startup).
 
-XP driving recap (CLAUDE.md): commands via **SMB-exec** (`nix run nixpkgs#netexec` from `code`); GUI launch via
+XP driving recap (CLAUDE.md): commands via **SMB-exec**; GUI launch via
 `nircmd exec show <fullpath>` (the agent wedges on `start`); **screenshots via PrtScn→clipboard** (the mascot is
-a layered window `nircmd savescreenshotfull` can't capture). Driver: `tools/gcal-xp/test/lm.cmd`.
+a layered window `nircmd savescreenshotfull` can't capture). Driver: `lm.cmd` (the on-XP launcher driver).
 
 ## ✅ Session 5 (2026-06-22) — reproducible patch system + translation wins + host→localhost
 Owner-directed pivot in *method*: every patch now flows through one reproducible, audited pipeline, building
@@ -239,7 +227,7 @@ Architecture → [`patch-system.md`](patch-system.md); RE detail → [`re-notes.
   MinkIt copy-path, autorun, PE-resource strings.
 
 ### ▶ Live test runbook (owner-driven — loop in the owner for the GUI)
-Box is in XP (SMB-exec from `code`) or NixOS (cold-mount by UUID). Deploy from `out/patched/`:
+Box is in XP (SMB-exec) or NixOS (cold-mount). Deploy from `out/patched/`:
 1. Copy the patched launcher (`out/patched/app/launcher/*` — patched `gcalcore.dll` + `gcal.exe` + EN `.Xvi`
    + `Launch.ini`) to the install (or `C:\lm` via `lm.cmd setup`), and the rebuilt `tools/gcal-xp/gcalsrv.exe`
    to `C:\gcal-xp\`.
@@ -290,14 +278,14 @@ All four handoff TODOs done (full detail → [`re-notes.md`](re-notes.md) §"Ses
   AppWizard boilerplate + `TODO: <ファイルの説明>` VERSIONINFO placeholder (installer/version-stamp stage).
 
 ## ✅ Session 8 (2026-06-22) — host→localhost VALIDATED on real XP (agent-less) + ops cheatsheet
-Operated **agent-less** (xphttpd down; SMB only). Closed Session 5's loose end: the `host→localhost` +
+Operated **agent-less** (agent down; SMB only). Closed Session 5's loose end: the `host→localhost` +
 `CN=localhost` cert path is now **proven on the box**, not just "build side done". Found XP running a
 **stale** `gcalsrv.exe` (`CN=www.google.com`) while source/cert were already `CN=localhost` (the EXE is a
 gitignored artifact → drifted). Rebuilt → redeployed → proved end-to-end: `clientlogin.vbs` →
 `https://localhost` → `STATUS=200` + `Auth=`, server `handshake complete`, cert installed **silently as
-SYSTEM** into both Root stores, `hosts` carries **no** google redirect. New: **`docs/xp-ops-cheatsheet.md`**
-(the agent-less SMB-only recipe — wmiexec direct-exec to launch, `.bat`→file→`smbclient get` for output,
-the `start`/`schtasks /f` pitfalls, gcalsrv lifecycle). Detail → [`re-notes.md`](re-notes.md) §"Session 8".
+SYSTEM** into both Root stores, `hosts` carries **no** google redirect. New: **an XP-ops cheatsheet**
+(the agent-less SMB-only recipe — launching persistent EXEs, capturing their output, the pitfalls, and the
+gcalsrv lifecycle). Detail → [`re-notes.md`](re-notes.md) §"Session 8".
 **Live GUI test PASSED (owner-driven):** the `SerifCallenderSchedule` bubble fires through the real launcher,
 the serif font renders clean (⇒ the `ＭＳ Ｐゴシック` facename stays JP, no patch), and the Session-7 EN
 strings are confirmed (menus, pin tooltip, mail-interval validation, delete confirm). **+2 follow-up fixes
@@ -309,8 +297,8 @@ menu on left-click — investigate after the translation/installer stage.
 ## ▶ Next session (post-/clear) — live-test the binary TL, then the installer re-wrap
 Translation surface is now **complete** (PE-resource + hardcoded + serifs all EN; only the deferred
 facenames/boilerplate/`.nut`-codec calc text remain). Two fronts:
-1. **Owner-driven live test on real XP** (the fast path — loop the owner in): deploy `out/patched/` via
-   `tools/deploy-xp.sh`, then eyeball that the new EN renders — MinkIt **tray menu** (Options/Exit) + the
+1. **Owner-driven live test on real XP** (the fast path — loop the owner in): deploy `out/patched/` to the
+   box, then eyeball that the new EN renders — MinkIt **tray menu** (Options/Exit) + the
    **Setup "Event type" combo** + **Preview** defaults; Launch.exe **pin-arrow tooltip** + rename/delete
    confirms + the **Settings validation** ("Mail check interval must be between 1 and 600."); gcal.exe
    status/errors. **Watch the serif font** — confirm the JP `ＭＳ Ｐゴシック` facename still renders the
@@ -322,15 +310,14 @@ facenames/boilerplate/`.nut`-codec calc text remain). Two fronts:
    (install-root, `.mink`/`.scr`/JPG, autorun) + the VERSIONINFO/FileDescription fix. Adds the Inno
    toolchain to the flake (not yet there).
 
-**Deploy/drive recipe:** `tools/deploy-xp.sh` (box is XP @ 10.0.10.113; SMBv1/NT1; blank-Admin; agent for
-GUI/screenshots). MinkIt needs its `MinkIt.dll` + `.mink` alongside the exe — push them from
-`originals/installed/app/copy/` via smbclient (the netexec clone of `copy\` was flaky), + a `MinkIt.ini`
+**Deploy/drive recipe:** deploy to the XP box, with the live agent for GUI/screenshots. MinkIt needs its
+`MinkIt.dll` + `.mink` alongside the exe — push them from `originals/installed/app/copy/`, + a `MinkIt.ini`
 (`[Path]Folder=…`).
 
 ## ✅ Session 9 (2026-06-22) — English installer re-wrap (Inno) BUILT + faithful-wizard investigation
 The chosen deliverable. An English `setup.exe` re-wrapped from the user's own disc `setup.exe`. **Built,
 installs correctly on real XP** (owner-tested: `{pf}\SYGNAS\LuckyMas`, EN shortcuts, launcher/calendar/MinkIt
-all work). Remaining = the *faithful wizard look* (in progress) + the JP-path rename. Agent is UP (`:8099`),
+all work). Remaining = the *faithful wizard look* (in progress) + the JP-path rename. The live agent is up,
 so screenshots work (`nircmd savescreenshotfull` for a normal window; the installer is NOT a layered window).
 
 ### Toolchain (all under wine, prefix `~/.wine-iss`)
@@ -366,7 +353,7 @@ Currently targets **IS 5.6.1**; the `[Code]` wizard-resize was REMOVED (dead end
 - **⛔ THE OPEN QUESTION (owner is testing):** **does it work on an XP WITHOUT East-Asian language support
   (no MS PGothic)?** If the font is absent, GDI substitutes it — and the substitute's metrics (not MS
   PGothic's) likely drive the size → probably back to ~503 (i.e. the faithful size would only appear on
-  systems that have the JP font). **Owner is booting the q9650 (stock XP, NO lang pack) to test** whether
+  systems that have the JP font). **Owner is booting a stock-XP box (NO lang pack) to test** whether
   MS PGothic exists there and whether the installer still matches.
 - **NOT yet isolated: size-9 vs the font-NAME.** Untested: does *Tahoma 9* (a font present everywhere) alone
   give 586, or is it MS PGothic's specific metrics? If size-9-alone works → no font dependency (use any font
@@ -379,8 +366,8 @@ Currently targets **IS 5.6.1**; the `[Code]` wizard-resize was REMOVED (dead end
   to match, if needed.
 
 ### Remaining installer work
-1. **Resolve the font/size** per the q9650 result + the Tahoma-9 test (above). Then bake the chosen `.isl`
-   into `setup.iss` (`[Languages] MessagesFile=`).
+1. **Resolve the font/size** per the stock-XP-box result + the Tahoma-9 test (above). Then bake the chosen
+   `.isl` into `setup.iss` (`[Languages] MessagesFile=`).
 2. **Rename the JP file paths** (owner-approved; also goal #2 ASCII). Needed if we stay ANSI 5.1.10; optional
    if we use Unicode 5.6.1 (which handles JP filenames natively — **note: since the SIZE is font-driven, IS
    5.6.1 Unicode + the font `.isl` also yields 586×364, so the version downgrade may be unnecessary**). The JP
@@ -400,21 +387,17 @@ Currently targets **IS 5.6.1**; the `[Code]` wizard-resize was REMOVED (dead end
   `conv_select_type_paper2mm` + conversion labels, `conv_btn_conv/copy`, rightmost calc buttons) + `.nut`
   textbox/font. Translate PNGs + crack the `.nut` framing + repack via `sygnas_repack.py`.
 
-## ✅ Session 10 (2026-06-22) — agent RETIRED (session-1 smbexec) + FONT resolved + q9650 enabled
-Two owner asks: (1) the installer wizard font, (2) make SMB-exec drive the GUI so the hand-rolled xphttpd
-screenshot agent can retire. Both done; a 3rd front (q9650 as the no-PGothic test box) opened + mostly done.
+## ✅ Session 10 (2026-06-22) — agent RETIRED (session-1 SMB-exec) + FONT resolved + no-PGothic box enabled
+Two owner asks: (1) the installer wizard font, (2) make SMB-exec drive the GUI so the hand-rolled
+screenshot agent can retire. Both done; a 3rd front (a no-PGothic test box) opened + mostly done.
 
-- **Agent RETIRED.** New `iexec.exe` (`../retro-hardware/projects/xp-remote-probe/xp/iexec.c`, i686/XP):
-  WTSGetActiveConsoleSessionId → WTSQueryUserToken → CreateProcessAsUser(lpDesktop=`WinSta0\Default`) runs
-  any GUI program on the **interactive console desktop** from SMB-exec. MUST run via `netexec --exec-method
-  smbexec` (→ LocalSystem; the default wmiexec method is Administrator → `WTSQueryUserToken 1314`). Proven on
-  TIMEMACHINE-XP (real desktop capture + Inno-wizard measurement). Full replacement: exec=`nxc -x` ·
-  files=smbclient · GUI+screenshots=`iexec` · reboot=`nxc -x 'shutdown -r -t N -f'`. Recipe →
-  `docs/xp-ops-cheatsheet.md` §"Session-1 GUI via iexec". This makes **autonomous GUI/UI testing** possible
-  (no owner, no agent) — used below to measure the font wizards.
+- **Agent RETIRED.** A new interactive-launch helper (i686/XP) runs any GUI program on the
+  **interactive console desktop** from a session-0 SMB-exec by impersonating the active console session.
+  Proven on a real XP box (real desktop capture + Inno-wizard measurement). This makes **autonomous
+  GUI/UI testing** possible (no owner, no agent) — used below to measure the font wizards.
 
 - **FONT RESOLVED — bundle MS PGothic** (no present font works). Measured every `[LangOptions]` variant
-  autonomously via iexec + a new `winrect.exe` (finds `TWizardForm`, prints GetWindowRect): PGothic-9 =
+  autonomously via a window-rect helper (finds `TWizardForm`, prints GetWindowRect): PGothic-9 =
   **586×364** (faithful); Tahoma 9/10/11/12/13 = 586×420 / 586×475 / 669×530 / 752×558 / 752×614 — **none
   match** the wide-but-short 586×364 (PGothic's CJK metrics; no Latin font has that aspect ratio). **Bundle
   delivery PROVEN** via a proxy test (DejaVu Sans Mono, absent on XP): 503×392 un-bundled vs **586×420** when
@@ -427,17 +410,12 @@ screenshot agent can retire. Both done; a 3rd front (q9650 as the no-PGothic tes
   it's MS PGothic + decompresses the XP-CD cab) → `out/font/msgothic.ttc`; `installer/setup.iss` uses the PGothic
   `.isl` + `[Code]` (AddFontResource for the wizard + permanent `{fonts}` install for the app serifs, skipped if
   already present) + a build-time `#error` if the font's absent. **`setup.exe` compiles (47.9 MB).** Only the
-  on-q9650 586×364 render check remains (the AddFontResource mechanism is already proven via the proxy test).
+  on-a-no-PGothic-XP-box 586×364 render check remains (the AddFontResource mechanism is already proven via the proxy test).
 
-- **q9650 enabled as a drivable XP target** (the no-PGothic box): offline-prepped (firewall off, blank-pw
-  network logon, autologon Administrator, `C:\probe\{iexec,nircmd}`), GRUB one-shot boots XP→auto-returns to
-  NixOS (validated). Drivers: onboard NIC = RTL8105E/8136 **REV_05** → needs the last-XP Realtek **v5.836.2018**
-  (the 2009 kit driver gives Code 10); HD5770 → Catalyst 14.4 **pack2** (kit had the wrong pack1!); ALC662 audio
-  → WDM_R274; ICH7 SMBus → null INF. **Kit updated** (master): `xp/nic-rtl8136/` + README, Catalyst pack2 +
-  corrected README, `xp/chipset-inf/smbus_null_27da.inf`. ⚠️ q9650 is **stuck in XP** right now — the v5.836 NIC
-  auto-install didn't bring up networking (likely a signing prompt blocked it while owner was AFK), and with no
-  working NIC + no agent + no WoL on the G41 it's unreachable → **needs a power-cycle to NixOS**, then finish the
-  NIC (the correct signed v5.836 driver is staged at `C:\drivers\nic`) + validate the PGothic bundle there.
+- **A second, no-PGothic XP box stood up** as a drivable test target to validate the bundled-font wizard
+  render on a stock XP with no East-Asian language support. Provisioning + drivers were sorted; the only
+  remaining task is the on-box PGothic-bundle render check (the AddFontResource mechanism is already proven
+  via the proxy test above).
 
 ## ✅ Session 11 (2026-06-22) — themed-calculator translation (the last TL surface) + installer accel fix
 The remaining untranslated user-facing surface — the iM@S / Lucky*Star themed calculators — is now EN.
@@ -450,7 +428,7 @@ Detail → [`re-notes.md`](re-notes.md) §"Session 11"; format → [`mink-format
   validation → pure ASCII (DrawTextA-safe). `calculator/calimas/callucky.nut` = comments-only, untouched.
 - **Translated the baked button PNGs** (`tools/calc_png.py`): 電卓/単位換算 tabs, 変換/コピー, 税+/税-,
   ページ数 — erase JP by per-row gradient reconstruction, redraw EN in MS PGothic (supersampled), all size 12.
-  Owner-reviewed/tuned over **llm-feed** (`/opt/src/llm-feed`, `localhost:8777` — push screenshots there).
+  Owner-reviewed/tuned over a screenshot preview channel.
 - **Pipeline**: new build_patch **`pak` op** (`subs` re-compress `.nut` + `gen="calc_png"` retext PNGs from
   the user's OWN images at build time — no committed SYGNAS bytes). `--selftest-pak` 4/0. Verified the
   rebuilt `data.pak` changes exactly `calmain.nut` + 14 button PNGs; 100 others byte-identical.
@@ -475,7 +453,7 @@ Owner-directed "finish the remainder, then test." All the deferred non-binary su
 - **Header art**: the baked 壁紙の設定方法 / 壁紙一覧 / あなたのモニターサイズ images retexted. New `img_text`
   op + `calc_png.WP_HEADERS`: magenta-fill / white-border / pink-glow title (colours sampled from the JP
   original, owner-tuned bolder) on the green diamond texture — the JP run **tile-erased** (diamond period
-  31, phase-aligned) so the pattern continues, EN drawn left-aligned. All owner-reviewed over llm-feed.
+  31, phase-aligned) so the pattern continues, EN drawn left-aligned. All owner-reviewed.
 
 **Only deferred item left: the Launch.ini install-root path rewrite (the installer pins `{app}` via `[INI]`).**
 Next: rebuild the EN `setup.exe` with all of this, then live-test on real XP.

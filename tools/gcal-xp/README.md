@@ -10,7 +10,7 @@ Google account**. XP's `hosts` points `www.google.com → 127.0.0.1` and this se
 | `:443` | HTTPS (**Schannel**) | `/accounts/ClientLogin` → `Auth=…` |
 | `:110` | POP3 (Winsock) | a working fake mailbox — `USER`/`PASS`/`STAT`/`LIST`/`UIDL`/`RETR`/`TOP` |
 
-Why native (vs. the old `code`-hosted Python): on XP the server speaks **Schannel** and the client is
+Why native (vs. the old separately-hosted Python): on XP the server speaks **Schannel** and the client is
 **WinINet** — the *same* 2007 stack, so the TLS handshake is **period-accurate by construction** (no modern-TLS
 coercion, no separate always-on box). The Python `../gcal-emu/gcal_emu.py` is kept as the protocol **oracle**.
 
@@ -99,21 +99,19 @@ The English installer bundles `gcalsrv.exe`+`gcalsrv.lua` to `{app}\gcal-xp`, **
 calendar never prompts, and the Launch.ini `[Mail]` POP3 keys — still needs RE; today the calendar works
 after a one-time any-login and mail is configured via the launcher's Settings.)*
 
-## Deploy / drive on XP (this LAN)
+## Testing
 
-⚠️ The **xphttpd agent is single-threaded** — a forever-running child wedges it. Drive everything through
-**SMB-exec**, reserve the agent for **screenshots**:
+Run it anywhere (a Windows/XP box, or under wine) and point a client at it:
 
-```sh
-# from `code` (LAN box with netexec); XP at its DHCP IP (e.g. 10.0.10.113), admin pw blank
-NXC="nix run nixpkgs#netexec -- smb <xp> -u Administrator -p ''"
-$NXC --put-file gcalsrv.exe '\gcal-xp\gcalsrv.exe'
-$NXC -x 'C:\gcal-xp\gcalsrv.exe --no-cert'     # headless; runs as SYSTEM (machine keyset)
-$NXC --get-file '\gcal-xp\gcalsrv.log' ./gcalsrv.log   # read the log back
+```bat
+gcalsrv.exe --no-tray --http 8080 --https 8443 --pop 1110   REM unprivileged test ports
+cscript //nologo test\clientlogin.vbs                       REM headless WinINet probe of the whole
+                                                            REM ClientLogin/TLS/cert-trust path (-> STATUS=200, Auth=)
 ```
 
-`test/clientlogin.vbs` (push + `cscript //nologo`) is a headless WinINet probe of the whole ClientLogin/TLS/
-cert-trust path — the proof used in Session 4.
+Or hit the feeds directly: `GET http://<host>/calendar/feeds/default/allcalendars/full` (Atom list),
+the event feed it links to, and POP3 `USER`/`PASS`/`STAT`/`LIST`/`RETR` on `:110`. `gcalsrv.log` (next to
+the EXE) records every request.
 
 ## Roadmap
 

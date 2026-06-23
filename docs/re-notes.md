@@ -1,14 +1,13 @@
 # MinkIt / Lucky☆Mas — RE log
 
-Running reverse-engineering notes. Scope + constraints: upstream
-`retro-hardware/projects/minkit-en-patch/README.md`. Format specs: [`mink-format.md`](mink-format.md).
+Running reverse-engineering notes. Format specs: [`mink-format.md`](mink-format.md).
 
 ---
 
 ## 2026-06-21 — Session 1: extraction + first recon
 
 ### Acquisition (no XP-disk pull needed)
-Local kit ISO on wslop → `setup.exe` = **Inno Setup 5.1.10** (app "らき☆マス デスクトップアクセサリ
+Local kit ISO on the dev box → `setup.exe` = **Inno Setup 5.1.10** (app "らき☆マス デスクトップアクセサリ
 Ver1.00") → `innoextract --codepage 932` → full installed tree in `originals/installed/` (164 files).
 Cleaner + pristine vs the scope doc's "rsync from the XP install".
 
@@ -117,12 +116,8 @@ qemu/xdelta3/python-construct-lief-pillow) available.
 - **Rough EN machine-translation of all 22 launcher characters** (`tools/build_launcher_en.py` →
   `patch/launcher/<char>.ini`): Name + 8 `Serif*` lines each, structure/`[POS]`/`\n`/`<%SCHEDULE%>`
   preserved. Repacked → all 22 round-trip exactly; total `.Xvi` size delta **+436 B**.
-- **Deployed to the XP Time Machine** (cold disk, **mounted by NTFS UUID** — the disk re-letters
-  sda↔sdb; a first `sda1` attempt mounted Win7's System-Reserved and `set -e`-aborted before any
-  write): 22 EN `.Xvi` overwrote `…\らき☆マス\launcher\` (originals →
-  `courier:/root/luckymas-launcher-orig.20260621-202727`), deployed bytes `cmp`-verified. Also
-  dropped the **SMBus identity INF** (`xp/chipset-inf/smbus_null.inf`) into `C:\WINDOWS\inf\` +
-  `C:\retro-kit\chipset-inf\`. Pending the owner's single reboot to test both.
+- **Deployed to a real XP box:** 22 EN `.Xvi` overwrote `…\らき☆マス\launcher\` (originals backed up
+  first), deployed bytes `cmp`-verified. Pending a reboot to test.
 - **Still open:** PE-resource UI strings (lief), `Launch.ini` titles + wallpaper HTML (trivial), the
   `.nut`/`.mink` codecs, route A/B lock-in, wine/QEMU loop.
 
@@ -131,18 +126,18 @@ qemu/xdelta3/python-construct-lief-pillow) available.
 ## 2026-06-22 — Session 2: live-test the calendar path → **protocol correction (ClientLogin = HTTPS)**
 
 Built the `tools/gcal-emu/` test-board (session 1) and stood it up to actually drive the launcher's
-calendar against it. The enabling infra (in `retro-hardware/projects/xp-remote-probe/`) turned into the
+calendar against it. The enabling XP-deployment infra turned into the
 real story; the LuckyMas-relevant findings:
 
-- **gcal-emu hosted + reachable.** Runs on the always-on `code` box behind Caddy (`http://www.google.com`
-  vhost → `gcal-emu` on :8091); XP's `hosts` redirects `www.google.com` → `code` (verified: XP
-  `ping www.google.com` → `10.0.10.53`). gcal.exe **launches + prompts for a Google account**; the
+- **gcal-emu hosted + reachable.** Runs on a separate build box behind a reverse proxy (`http://www.google.com`
+  vhost → `gcal-emu` on :8091); XP's `hosts` redirects `www.google.com` → that box (verified: XP
+  `ping www.google.com` resolves to it). gcal.exe **launches + prompts for a Google account**; the
   seeded `gcal.ini` wasn't in the format it reads, so it shows the login dialog (fine — any creds work
   against the emulator).
 - **🔧 PROTOCOL CORRECTION — ClientLogin is HTTPS, not plain HTTP.** On submitting (bogus) credentials,
   gcal.exe errors with WinINet **12157 = `ERROR_INTERNET_SECURITY_CHANNEL_ERROR`** (a JP "secure channel"
   dialog) — i.e. it opens a **TLS** connection for `/accounts/ClientLogin` and the handshake fails (our
-  `code:443`/Caddy has no `www.google.com` cert + no XP-era TLS). The session-1 note "all WinINet over
+  test server's `:443` had no `www.google.com` cert + no XP-era TLS). The session-1 note "all WinINet over
   plain `http://`, NO HTTPS → no cert" was **half-wrong**: the scheme isn't a string in the binary
   (WinINet sets it via a flag/port at runtime — `INTERNET_FLAG_SECURE`/443), so strings-recon couldn't
   see it. Period-correct: Google's 2007 ClientLogin was **HTTPS-only** (credentials over TLS); the
@@ -155,14 +150,13 @@ real story; the LuckyMas-relevant findings:
     enough), and the exact TLS/cipher it asks for.
 - **⇒ Next step (the open build):** give the emulator an **HTTPS `/accounts/ClientLogin` on :443** with
   (a) a self-signed `www.google.com` cert **installed in XP's Trusted Root store**, and (b) **XP-SP3-era
-  TLS** (TLS 1.0 + AES-CBC/3DES — XP can't do modern TLS, and `code`'s Caddy has neither the cert nor the
+  TLS** (TLS 1.0 + AES-CBC/3DES — XP can't do modern TLS, and the test server had neither the cert nor the
   old ciphers). Then the feeds (already working over HTTP) should follow → the Serif bubbles fire.
-- **Live-control infra built (reusable, not LuckyMas-specific):** a tiny curl-driven agent on XP
-  (`xphttpd`, runs as Administrator, real interactive screenshots) + `netexec`/SMB for clean deploys —
-  see `retro-hardware/projects/xp-remote-probe/`. This is what made the live recon possible (the Bitvise
-  SSH route was a dead end). nircmd does **not** actually hang as Administrator (the session-1 "hang" was
-  a Startup-batch context artifact); but nircmd with **no/garbled args pops a modal** that wedges a
-  single-threaded caller — that DID look like the hang.
+- **Live-control infra built (reusable, not LuckyMas-specific):** a remote-control path to drive a real
+  XP box (launch GUI apps, take screenshots) plus a clean file-deploy path. This is what made the live
+  recon possible (the Bitvise SSH route was a dead end). nircmd does **not** actually hang in an elevated
+  session (the session-1 "hang" was a Startup-batch context artifact); but nircmd with **no/garbled args
+  pops a modal** that wedges a single-threaded caller — that DID look like the hang.
 
 ---
 
@@ -183,15 +177,13 @@ real story; the LuckyMas-relevant findings:
     seclevel stays ≥1 and the server rejects the TLS1.0 ClientHello with a **`protocol_version` alert
     (70)** — looks like "TLS1.0 unsupported" but it's a seclevel artifact. nixpkgs OpenSSL 3.6 *does*
     support TLS1.0.
-- **Infra finding:** `code`'s Caddy **wildcard-binds `*:80`/`*:443`**, so a secondary IP (`10.0.10.54`)
-  can't host `:443` either → the code-hosting route is a dead end for the HTTPS endpoint. Moot now (XP-local
-  `hosts → 127.0.0.1`). Scaffolding torn down; Caddy left intact.
+- **Infra finding:** the separate-host route is a dead end for the HTTPS endpoint. Moot now (XP-local
+  `hosts → 127.0.0.1`). Scaffolding torn down.
 - **Cert trust:** the native server **installs the self-signed cert into XP's Root by default**
   (`CertAddEncodedCertificateToStore`); WinINet won't trust self-signed otherwise, harmless if it ignored
   cert errors → no separate trust-probe needed.
-- **Live infra confirmed this session:** xphttpd agent live at **10.0.10.113:8099** (`/run` ok, XP SP3);
-  `ssh root@code.soy` works (LAN tooling, `nix run nixpkgs#netexec`); i686 mingw cross-gcc fetchable via
-  `nix … pkgsCross.mingw32.buildPackages.gcc` (cached, ~79 MiB).
+- **Live infra confirmed this session:** a real XP SP3 box is reachable for remote deploy/drive; i686
+  mingw cross-gcc fetchable via `nix … pkgsCross.mingw32.buildPackages.gcc` (cached, ~79 MiB).
 
 ---
 
@@ -206,7 +198,7 @@ only XP system DLLs): plain-Winsock **HTTP feeds :80** + **POP3 :110**, **Schann
 ported from the `gcal_emu.py` oracle; rich per-request file logging (`gcalsrv.log`). Build: `build.sh`
 (mingw via nix). Files: `gcalsrv.c`, `cert_pfx.h`/`embed-pfx.sh`, `build.sh`, `test/clientlogin.vbs`, `README.md`.
 
-**Proven on the live box (10.0.10.113):** an XP **WinINet** client (`MSXML2.XMLHTTP`, the same stack
+**Proven on the live XP box:** an XP **WinINet** client (`MSXML2.XMLHTTP`, the same stack
 `gcal.exe` uses — `test/clientlogin.vbs`) POSTed ClientLogin over TLS and got `STATUS=200` +
 `Auth=EMU_TEST_TOKEN`. Server log: `TLS 127.0.0.1: handshake complete → POST /accounts/ClientLogin → 200`.
 So WinINet↔Schannel handshake **completes**, the self-signed cert is **trusted** (Root install worked), and
@@ -230,15 +222,14 @@ by construction) is **confirmed**.
   Schannel with `SEC_E_INVALID_TOKEN` (0x80090308) — *not* a problem for real WinINet, but my failure path
   called `DeleteSecurityContext` on a never-created context → access violation → crash popup. Fix: only delete
   if a context was created + `SetErrorMode(SEM_NOGPFAULTERRORBOX…)` so a server fault can never block the box.
-- **SYSTEM keyset.** Launched headless via SMB-exec (wmiexec = SYSTEM), `PFXImportCertStore` fails with
+- **SYSTEM keyset.** Launched headless as LocalSystem (session 0), `PFXImportCertStore` fails with
   `NTE_BAD_KEYSET` (0x8009000b); user keyset only works in an interactive session → **fall back to
   `CRYPT_MACHINE_KEYSET`**. Now works both as the interactive user (deliverable) and as SYSTEM (test).
 
-**Operational lessons (now in CLAUDE.md):** the **xphttpd agent is single-threaded** — a forever-running
-child (e.g. the server) inherits its stdout pipe and **wedges** it. ⇒ drive everything via **SMB-exec
-(`nix run nixpkgs#netexec`)** and reserve the agent for **screenshots only**. The headless server runs fine
-as SYSTEM in session 0 (ports are global; loopback crosses sessions; trust via LocalMachine\Root). TODO:
-fix the agent's single-threadedness, or see if `smbexec -i 1` can run on the interactive desktop.
+**Operational lessons:** launch a forever-running child (the server) detached so it doesn't inherit and
+wedge the launcher's stdout pipe; reserve interactive control for **screenshots only**. The headless
+server runs fine as SYSTEM in session 0 (ports are global; loopback crosses sessions; trust via
+LocalMachine\Root).
 
 **✅ Lua migration done + validated (same session).** Embedded **Lua 5.4** (statically linked, compiled from
 the nix-pinned source → `liblua.a`; the EXE still imports only XP DLLs, now ~300 KB). C keeps the transport
@@ -246,7 +237,7 @@ the nix-pinned source → `liblua.a`; the EXE still imports only XP DLLs, now ~3
 (routing, Atom builders, ClientLogin/POP3 responses, `gcal-xp.ini`). C↔Lua boundary = `http_handle()` +
 `pop3_event()`; one shared `lua_State` under a lock (low volume). The script is embedded (`gcalsrv_lua.h` via
 `embed-lua.sh`) with an external `<exedir>\gcalsrv.lua` override → a real local-calendar backend is now a script
-edit. **Re-validated on XP via SMB-exec:** WinINet TLS ClientLogin (`STATUS=200`, `Auth=`), the HTTP Atom feeds,
+edit. **Re-validated on real XP:** WinINet TLS ClientLogin (`STATUS=200`, `Auth=`), the HTTP Atom feeds,
 and POP3 (incl. multi-line LIST) — all **byte-identical** to the C version.
 
 **✅ End-to-end captured on real XP (same session).** Drove the actual launcher against our Lua server and
@@ -261,11 +252,11 @@ screenshotted the mascot bubbles (→ `docs/screenshots/`, README gallery). `gca
 - **Screenshot gotcha:** the mascot is a per-pixel-alpha **layered window** — `nircmd savescreenshotfull`
   (GDI BitBlt) captures it as **bare desktop**. Use **PrtScn → clipboard → save** (`nircmd sendkeypress 0x2c`
   then `nircmd clipboard saveimage`) to grab the composited framebuffer.
-- **JP-path + agent gotchas:** the JP install path breaks cmd `start`/`cd` → copy the launcher to an ASCII
-  path (`C:\lm`, `Launch.ini` `Folder=C:\lm`). The single-threaded xphttpd agent wedges if a launched GUI holds
+- **JP-path + launch gotchas:** the JP install path breaks cmd `start`/`cd` → copy the launcher to an ASCII
+  path (`C:\lm`, `Launch.ini` `Folder=C:\lm`). A single-threaded caller wedges if a launched GUI holds
   its stdout pipe; **`nircmd exec show <fullpath>`** detaches cleanly (no wedge), `start`/`start …>nul` did not.
   And `nircmd savescreenshotfull` fails if a *preceding* chained command used `>nul` (the nul handle leaks as
-  its stdout) — delay with `ping` **without** `>nul`. Driver: `tools/gcal-xp/test/lm.cmd`.
+  its stdout) — delay with `ping` **without** `>nul`. Driver: `lm.cmd` (the on-XP launcher driver).
 
 **Remaining:** silent (no-modal) cert install + first-run installer; patch `gcalcore.dll`'s host string
 (wide `www.google.com`) → `localhost` so the redirect doesn't blackhole real Google; finish the EN text +
@@ -312,11 +303,9 @@ Owner-directed: make patching **reproducible + tracked** (one auditable pipeline
   `.mink` (10) / `.scr` (4) / wallpaper-JPG renames; `MinkIt` copy-engine path config (no INI ships →
   RE where it reads its folder); `autorun.inf`; PE-resource UI strings (lang 1041).
 
-**✅ Live test PASSED on real XP (10.0.10.113), owner-driven.** Deployed via the new
-[`tools/deploy-xp.sh`](../tools/deploy-xp.sh) — which captures the recipe (SMBv1/**NT1** or smbclient
-just times out; blank-Administrator auth; **agent vs SMB-exec** split; **kill+del before overwrite** or
-SHARING_VIOLATION; hosts via **pull/filter/push**, not cmd redirection; the protected-root cert modal;
-layered-window screenshots via PrtScn). Patched launcher → `C:\lm`, rebuilt `gcalsrv.exe` → `C:\gcal-xp`,
+**✅ Live test PASSED on real XP, owner-driven.** Deployed to the XP box (kill+del before overwrite to
+avoid SHARING_VIOLATION; the protected-root cert modal; layered-window screenshots via PrtScn). Patched
+launcher → `C:\lm`, rebuilt `gcalsrv.exe` → `C:\gcal-xp`,
 hosts line dropped. Validated: WinINet **ClientLogin TLS → localhost** (STATUS=200, `Auth=`), allcalendars
 + event feed (200), the EN **SerifCallenderSchedule** bubble rendered hiyori's served events (re-fires on
 manual check), and **google.com is still reachable** (real internet intact — the byte-patch replaced the
@@ -365,7 +354,7 @@ renders on any locale, no ASCII constraint (unlike the ANSI-drawn `.Xvi` serifs 
 - **⇒ PE-resource translation is COMPLETE** for everything that's resource-translatable + user-visible.
   **Remaining JP is binary/hardcoded strings** — next session (post-/clear): the pin/hold-arrow **tooltip**
   and any other strings drawn via `*A` APIs straight from the binaries (RE + `binpatch`); also the `.Xvi`
-  serif **☆→ASCII** locale pass. Deploy/drive recipe: `tools/deploy-xp.sh`.
+  serif **☆→ASCII** locale pass.
 
 ---
 
@@ -449,10 +438,9 @@ user-mode PE checksums; binpatch leaves them stale, harmless — `pe_res` re-fix
   live rendering was XP-validated in Session 6; not worth touching that path now).
 **⇒ Remaining = owner live-test on XP (the menus/tooltip/messages render EN), then the installer re-wrap.**
 
-## 2026-06-22 — Session 8: host→localhost VALIDATED on real XP (agent-less) + ops cheatsheet
-Operated **agent-less** (xphttpd `:8099` down; SMB only — netexec + smbclient from wslop). Closed the one
-loose end from Session 5: the `host→localhost` + `CN=localhost` cert path was "build side done" but never
-cleanly proven on the box.
+## 2026-06-22 — Session 8: host→localhost VALIDATED on real XP
+Closed the one loose end from Session 5: the `host→localhost` + `CN=localhost` cert path was "build side
+done" but never cleanly proven on the box.
 
 - **Found a stale-binary gap.** XP was running an old `gcalsrv.exe` whose log reported `cert CN=www.google.com`
   (the CN is read live via `CertGetNameStringA` — not hardcoded — so it was real). The committed *source* +
@@ -460,18 +448,19 @@ cleanly proven on the box.
   www.google.com/…). `gcalsrv.exe`/`gcalsrv_lua.h` are **gitignored build artifacts** → the deployed binary
   had drifted from source. Lesson: always `build.sh` before trusting a deployed gcalsrv.
 - **Rebuilt** via `tools/gcal-xp/build.sh` (kept the CN=localhost `cert_pfx.h`; regen lua; imports = XP DLLs only),
-  redeployed, **started agent-less**, and **proved end-to-end**:
+  redeployed, **started on the XP box**, and **proved end-to-end**:
   - server log: `cert CN=localhost` · `gcalsrv ready (3 listeners)` · `cert: install -> CurrentUser\Root: ok`
     + `LocalMachine\Root: ok` (installed **silently as SYSTEM**, no modal; owner also approved the interactive
     cert prompt) · `TLS 127.0.0.1: handshake complete` → `POST /accounts/ClientLogin -> 200`.
   - client (`clientlogin.vbs`, default host=localhost, = gcal.exe's WinINet stack): `URL=https://localhost/…`
     `STATUS=200 OK` `Auth=EMU_TEST_TOKEN`. ⇒ WinINet **trusts CN=localhost** over TLS to `https://localhost`
     with **no hosts redirect** (`hosts` = `127.0.0.1 localhost` only). The deliverable's whole TLS layer holds.
-- **Operating-mode discoveries (→ `docs/xp-ops-cheatsheet.md`):** wmiexec inline-command output is flaky →
-  push a **`.bat` that redirects to a file**, then `smbclient get` it. Launching a persistent EXE: **`start`
-  via wmiexec fails silently** (session-0 window station) and **`schtasks /create /f` fails on XP** (`/f` is
-  Vista+); ✅ **direct exec** `netexec -x 'C:\gcal-xp\gcalsrv.exe'` works (GUI-subsystem → `cmd /c` returns at
-  once, process persists). Silent SYSTEM cert install (both Root stores) → useful for the installer stage.
+- **Operating-mode discoveries:** remote inline-command output is flaky → have the remote run a **`.bat`
+  that redirects to a file**, then fetch the file. Launching a persistent EXE remotely: **`start` from a
+  session-0 context fails silently** (window station) and **`schtasks /create /f` fails on XP** (`/f` is
+  Vista+); ✅ a **direct exec** of `C:\gcal-xp\gcalsrv.exe` works (GUI-subsystem → the launching `cmd /c`
+  returns at once, the process persists). Silent SYSTEM cert install (both Root stores) → useful for the
+  installer stage.
 - **Live GUI test PASSED (owner-driven, owner present):** redeployed the latest `out/patched/` launcher to
   `C:\lm`, owner drove it. Confirmed on real XP: the **`SerifCallenderSchedule` bubble fires** through the
   real launcher (full localhost path end-to-end), the **serif font renders clean** (⇒ the held-back

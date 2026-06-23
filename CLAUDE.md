@@ -8,13 +8,10 @@ Read first: `README.md`, `docs/re-notes.md` (RE log), `docs/next-builds.md` (the
 session log), `docs/mink-format.md` (container specs). Upstream scope:
 `../retro-hardware/projects/minkit-en-patch/README.md`.
 
-## Sibling repos
-- **`../retro-hardware`** — the Windows XP "Time Machine" hardware build + XP infra. Key:
-  `HANDOFF.md` (fleet + access), `projects/xp-remote-probe/` (the live agent + cold-loop used to
-  drive XP), `builds/` (the courier NixOS configs).
-- **`../nix-lab`** — the home-lab NixOS flake. Hosts: `code` (always-on orchestrator — our deploy +
-  cross-build box), `cold`, `lame`, `mail`, `relay`, `wslop` (this dev box). The retired
-  Python-hosting scaffolding lives at `hosts/code/gcal-emu.nix` (kept; pivoted away from it).
+## Sibling repos (private home-lab — CLAUDE.md MAY point here; user-facing docs may NOT)
+- **`../retro-hardware`** — the Windows XP "Time Machine" hardware build **and all the XP deploy/test ops
+  for this project** (see the pointer section below). This is where you learn to run LuckyMas live on XP.
+- **`../nix-lab`** — the home-lab NixOS flake (the deploy + cross-build hosts).
 
 ## Hard rule
 Never commit or redistribute any SYGNAS original file. `originals/` is gitignored. We ship only a
@@ -22,56 +19,22 @@ delta + tooling that applies to the user's own disc copy. The `certs/` self-sign
 fixture is NOT a SYGNAS file and NOT a secret (a LAN-isolated fake-Google fixture) → committed on
 purpose so the served cert == the cert installed in XP's Root, byte-for-byte.
 
-## The Time Machine (the XP target)
-- i7-4790K / Z97X-UD3H. Runs **ONE OS at a time**: NixOS courier `timemachine` (default boot) **or**
-  Windows XP **or** Win7. MAC `74:d4:35:ea:6d:f2`; DHCP IP floats (seen `.113`/`.114`/`.115`).
-- XP disk NTFS UUID **`C2DCD5A2DCD59151`**. Cold-mount **by UUID only** (the disk re-letters
-  sda↔sdb across boots): `mount -t ntfs-3g -o ro|rw /dev/disk/by-uuid/C2DCD5A2DCD59151 /mnt/…`
-  (only while the box is in NixOS / XP cold; guard on `ntoskrnl.exe` presence before writing).
-- App install root on XP: `C:\Program Files\SYGNAS\らき☆マス\{copy,launcher,calc,wallpaper}`.
-  Calendar client = `…\launcher\{gcal.exe,gcalcore.dll}`; mail = `…\launcher\Launch.exe`.
-
-## Reaching + driving the box
-**When XP is booted, the courier `timemachine` is OFFLINE** (one OS at a time; XP reuses the NIC
-lease). Reach XP directly:
-- **xphttpd agent** (runs as Administrator in the interactive session → real screenshots, launches
-  GUI apps the owner sees): `http://<xp-ip>:8099/` — `GET /ping`; `GET /run?k=rmprobe2026&c=<urlcmd>`
-  (cmd.exe, returns stdout+stderr, 30 s cap); `GET /reboot?k=rmprobe2026` (→ back to NixOS).
-  Source: `../retro-hardware/projects/xp-remote-probe/xp/xphttpd.c`.
-- **netexec/SMB from `code`** (clean deploys + agent rescue; blind to the GUI — session 0):
-  `ssh root@code.soy` then `nix run nixpkgs#netexec -- smb <xp-ip> -u Administrator -p '' -x '<cmd>'`
-  (`--put-file` / `--get-file` to move files). Admin password is **BLANK**.
-
-**When NixOS is booted:** `ssh root@timemachine.soy` (key auth `headpats@cutestation`).
-
-**Driving the XP GUI** (screenshots / launching apps): the **`xphttpd` agent is RETIRED** → use **`iexec`**
-(`../retro-hardware/projects/xp-remote-probe/xp/iexec.c`) via **`nxc --exec-method smbexec`** (→ LocalSystem;
-the default method = Administrator → `WTSQueryUserToken 1314`) to launch any GUI on the **interactive console
-desktop** and screenshot it — fully agent-less, **no owner needed** (validated on q9650 + TM). Recipe:
-**`docs/xp-ops-cheatsheet.md`** §"Session-1 GUI via iexec". The mascot is a per-pixel-alpha **layered window**
-→ capture via **PrtScn→clipboard** (`iexec … nircmd sendkeypress 0x2c` then `… nircmd clipboard saveimage`),
-NOT `savescreenshotfull` (BitBlt renders it as bare desktop). Measure a window precisely with `winrect.exe`.
-JP install path breaks cmd `start`/`cd` → work from an ASCII copy. Loop the owner in only for visual judgment a
-screenshot can't settle, or physical actions (cabling/BIOS/cards). Driver helpers: **`tools/deploy-xp.sh`** (the full deploy+drive recipe — SMBv1/**NT1**
-or smbclient times out; blank-Administrator auth; **agent vs SMB-exec** split; **kill+del before
-overwrite**; hosts via pull/filter/push; the protected-root cert modal) + `tools/gcal-xp/test/lm.cmd`.
-When the **agent is down** (SMB-only mode), follow **`docs/xp-ops-cheatsheet.md`** — the validated
-agent-less path: launch persistent EXEs via wmiexec **direct-exec** (NOT `start`/`schtasks /f`, both fail),
-get output via a **pushed `.bat` → file → smbclient-get** (inline exec output is flaky), gcalsrv
-rebuild→deploy→verify lifecycle, and the silent-as-SYSTEM cert install.
-
-## Boot loop (NixOS ⇄ XP) — recoverable
-- Default boot = NixOS. **Flip into XP:** on the courier run `/root/boot-xp-once.sh`
-  (`grub-reboot "Windows XP (Crucial)"` + `systemctl reboot`). Boots XP **exactly once**; any XP
-  shutdown/reboot returns to NixOS (one-shot consumed at the GRUB stage).
-- **Re-arming is always available:** if XP reboots back to NixOS (or you call the agent's `/reboot`),
-  the courier comes online → `ssh root@timemachine.soy /root/boot-xp-once.sh` flips it back to XP.
-  So rebooting XP is **not** a lockout — it just costs one NixOS round-trip. Use a reboot whenever you
-  need NixOS-side work (cold-mount, hive edits) or a clean XP restart.
-- Offline hive edits (box in NixOS / XP cold): `nix shell nixpkgs#hivex -c hivexregedit --merge …`.
+## Deploy + test live on the XP box → see `../retro-hardware` (don't reinvent it here)
+You don't deploy/drive XP from this repo — the full, current, private recipe lives in the hardware repo:
+- **`../retro-hardware/projects/minkit-en-patch/`** — LuckyMas-specific ops: **`deploy-xp.sh`**
+  (`probe`/`launcher`/`server`/`hosts`/`launch`/`shot`; reads this repo's `out/patched` + `tools/gcal-xp/`,
+  override `LM_REPO=`), **`xp-ops-cheatsheet.md`** (the agent-less **SMB-exec + `iexec`** recipe — deploy,
+  drive the GUI, screenshot the **layered** mascot via **PrtScn→clipboard** not BitBlt, gcalsrv lifecycle,
+  silent SYSTEM cert install), **`lm.cmd`** (on-XP launcher driver → ASCII `C:\lm`).
+- **`../retro-hardware/HANDOFF.md`** + **`projects/xp-remote-probe/`** — fleet/access + the agent-less
+  control stack (`iexec` GUI launch via `netexec --exec-method smbexec`). XP build:
+  **`builds/time-machine-asbuilt.md`**.
+- Gist: the XP box runs **one OS at a time** (reach it over SMB; it's offline while in its other OS); app
+  install root `C:\Program Files\SYGNAS\らき☆マス\{copy,launcher,calc,wallpaper}`; loop the owner in only for
+  visual judgment a screenshot can't settle, or physical actions. **Everything specific lives in retro-hardware.**
 
 ## Building XP binaries (i686, XP subsystem)
-Cross-compile with mingw-w64 via nix (works locally on wslop; also cached on `code`):
+Cross-compile with mingw-w64 via nix (works in `nix develop`):
 ```sh
 nix shell nixpkgs#pkgsCross.mingw32.buildPackages.gcc --command \
   i686-w64-mingw32-gcc src.c -o out.exe -lws2_32 -O2 -s -mwindows \

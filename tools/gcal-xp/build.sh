@@ -12,7 +12,7 @@ here="$(cd "$(dirname "$0")" && pwd)"; cd "$here"
 CC=i686-w64-mingw32-gcc
 AR=i686-w64-mingw32-ar
 
-# Bring the cross toolchain on PATH from nix if needed (works on wslop + code).
+# Bring the cross toolchain on PATH from nix if needed (works in `nix develop` / any box with nix).
 if ! command -v "$CC" >/dev/null 2>&1; then
   exec nix shell nixpkgs#pkgsCross.mingw32.buildPackages.gcc --command bash "$0" "$@"
 fi

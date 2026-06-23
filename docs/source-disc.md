@@ -94,12 +94,18 @@ subsystem enumerates them, and the disc's readme directs the user to **Control P
 Saver**. The launcher's only related item is a generic Display-Properties shortcut (`Exec009 =
 {sys}\desk.cpl`) — the same applet — never a specific `.scr`.
 
-> ⚠️ **Known issue (under investigation):** on a **non-Japanese-locale** XP the screensavers show the JP
-> error 「スクリーンセーバーを完全に削除するには再起動してください」 instead of running. The 2006
-> ASPack-packed engine picks its animation by reading its **own filename** in the system's legacy
-> codepage, which can't represent the name on a non-JP locale (and the English rename isn't in its table).
-> Whether it's fixable on an EN-locale box (rename revert · `Language for non-Unicode programs = Japanese`
-> · binary patch) is being investigated — see [`next-builds.md`](next-builds.md) §"Session 17".
+> ⚠️ **These are non-functional stubs — they do not run, on any locale.** This is a **SYGNAS defect on
+> the disc**, not a locale problem and not anything our patch causes. The binary is the commercial
+> **ScreenTime For Flash** engine; a working screensaver needs the engine `.scr` **plus** a `saver.dat`
+> content package (which holds the actual Flash movie) **plus** the Flash Player 8 ActiveX. **The disc
+> shipped only the engine `.scr`** — no `saver.dat`, no movie, no Flash — so on launch the engine looks
+> for `saver.dat`, doesn't find it, and exits immediately (the JP「…再起動してください」shows in the
+> Display-Properties preview pane). Proven by decompiling the unpacked engine **and** live XP testing:
+> it fails identically across EN/JP locale × English/Japanese filename × 2026/2007 system date, while a
+> stock Windows screensaver launched the same way works. SYGNAS later released the **working** versions
+> separately (on their since-defunct site) as an apology — standalone installers that bundle the movie +
+> Flash 8; installing one over the disc stub yields a working screensaver (verified). Full teardown:
+> [`screensaver-re.md`](screensaver-re.md); restoring the working set into the EN build → [`next-builds.md`](next-builds.md).
 
 ### Full file manifest (SHA-256)
 

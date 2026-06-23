@@ -720,3 +720,36 @@ to dismiss). Run a `.scr` directly with `… "<path>\X.scr" /s` via iexec.
 - `docs/source-disc.md` §"Screensavers — one binary, four names" — the "selected/functional via Display
   Properties" line (add the on-EN-locale error + the resolution).
 - `CLAUDE.md` — the "translation surface COMPLETE … the 4 screensaver filenames … are EN" line.
+
+## ✅ Session 18 (2026-06-23/24) — screensaver mystery SOLVED (the handoff hypothesis was wrong)
+
+The Session-17 "JP-non-Unicode-locale" hypothesis is **disproven**. Full teardown + live XP proof →
+[`screensaver-re.md`](screensaver-re.md). Summary:
+
+- **Root cause: the disc shipped non-functional stubs.** The `.scr` is the commercial **ScreenTime For
+  Flash** engine. A working screensaver = engine `.scr` **+** a `saver.dat` content package (the Flash
+  movie) **+** Flash Player 8. The disc included **only the engine `.scr`** — innoextract of the disc
+  `setup.exe` (sha `f394…`) lists 164 files in `app/`+`sys/`, **zero `.dat`**, no movie, no Flash; the
+  ~135 KB packed engine has no room to embed one. On launch the engine checks for `saver.dat`, doesn't
+  find it, sets an error flag and exits in ~2 s (silent `/s`; the JP「…再起動してください」in the `/p`
+  preview) — *before* it ever creates the Flash control.
+- **Method:** unpacked the ASPack binary with a from-scratch **Unicorn emulator** (`work/scr/unpack.py`,
+  ESP-trick OEP), decompiled all 2445 funcs with **Ghidra** (`out/ghidra/scr/`), traced the init
+  (`FUN_00401871`) to the `saver.dat`-missing exit. **Live-confirmed on real XP** (q9650 EN + timemachine
+  JP via WoL): dies identically across **EN/JP locale × English/Japanese name × 2026/2007 date**, while a
+  stock screensaver launched the same way runs. (Also: rolling the clock to 2007 doesn't help; not expiry.
+  ⚠️ rolling an XP clock far off breaks smbclient NTLM — netexec/atexec is immune.)
+- **The fix existed all along (SYGNAS's doing):** documented creator history — the disc screensavers
+  "had errors that made them flat out not work," so SYGNAS released the **working** versions on their
+  (now-defunct) site as an apology. Those are standalone installers (chibi/imas3d/imas_comic/
+  luckystar_comic `*_setup.exe`) bundling the engine + a **Flash-8 movie** (`CWS v8`) + **`flash8.ocx`**.
+  **Verified live:** installing `chibi_setup.exe` over the stub on timemachine → the chibi screensaver
+  previews in Display Properties AND runs fullscreen.
+
+### ▶ Next: restore the working screensavers into the EN build (task #6)
+Owner reuploads the 4 apology installers to **archive.org** (the original site is gone) → pin URLs+sha256
+in `make_iso.py` (same auto-download pattern as IS/innounp) → RE exactly what each installer places
+(`.scr` + `saver.dat` + working-dir files + Flash 8 registration) → install that payload directly +
+reproducibly via the EN installer (**extract-and-merge**, not silently running the GUI installers).
+Never commit the SYGNAS files (download-at-build only). Deferred: a deep search for the apology release's
+provenance/history.

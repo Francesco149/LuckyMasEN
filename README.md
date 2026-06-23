@@ -2,8 +2,8 @@
 
 **English fan-translation + a one-command patcher** for SYGNAS 「らき☆マス」(*Lucky☆Mas*) — a 2007
 *Lucky☆Star × THE iDOLM@STER* **desktop-accessory pack** (circle **SYGNAS**, catalog SGNS-0009,
-Comiket 73). Desktop mascots, a calendar companion that talks to you, themed calculators, wallpapers,
-and screensavers — fully in English, running on **real Windows XP**, with **no Google account** needed.
+Comiket 73). Desktop mascots, a calendar companion that talks to you, themed calculators, and wallpapers
+— fully in English, running on **real Windows XP**, with **no Google account** needed.
 
 Plus a complete reverse-engineering log of SYGNAS's in-house **MinkIt** mascot engine and its container
 formats. Give the tool your *own* copy of the disc; it builds you an English `setup.exe` / ISO. No
@@ -61,7 +61,7 @@ reverse-engineering behind it all is documented at the **bottom of this README**
 | 📬 **Mail check** | A "you've got mail" bubble backed by a working local **POP3** mailbox. | Runs at startup, or right-click the mascot ▸ **mail check**; the bubble opens your mail client (Outlook Express by default). Edit your inbox in `gcalsrv.lua` (the `MAIL` table). |
 | 🧮 **Themed calculators** | iM@S- and Lucky☆Star-skinned calculators plus a doujin unit **converter**. | Launch **iM@S Calculator** or **Lucky Star Calculator** from the launcher menu. The converter does BPM↔ms, ms↔fps frames, page-count↔paper thickness, and tax. |
 | 🖼️ **Wallpapers** | 84 wallpapers (14 artists × resolutions) with an HTML **picker**. | Launch **Wallpaper** from the menu, then click a thumbnail in the gallery to set it. |
-| 🌙 **Screensavers** | Four: iM@S 3D, iM@S Comic, Lucky☆Star Comic, Chibi Characters. | **Control Panel ▸ Display ▸ Screen Saver** → choose a *LuckyMas* one. ⚠️ *Known issue:* they error on a non-Japanese-locale XP — [under investigation](docs/next-builds.md). |
+| 🌙 **Screensavers** | Four (iM@S 3D · iM@S Comic · Lucky☆Star Comic · Chibi). | ⚠️ **Broken on the disc — a known SYGNAS defect, not anything our patch does.** They're *ScreenTime for Flash* screensavers, but the disc shipped only the engine `.scr` without the content package they need, so they error out. SYGNAS later released the **working** versions separately as an apology; folding those into the EN build is [in progress](docs/next-builds.md). Background: [the screensaver teardown](docs/screensaver-re.md). |
 | 📦 **The installer** | SYGNAS's Inno Setup wizard, faithfully re-wrapped in English. | Run `setup.exe` — or build your own English disc from your copy (see below). |
 
 ### The calendar, with no Google account

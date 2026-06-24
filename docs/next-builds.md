@@ -783,4 +783,8 @@ InstallShield-MSI `*_setup.exe` (the engine + a Flash-8 `CWS v8` movie + `flash8
   the built `setup.exe` → all four run fullscreen; ASCII-locale fix confirmed on real EN XP). Hero shots in
   `docs/screenshots/screensaver-*.png`; clean-install ops scripted in retro-hardware
   `projects/minkit-en-patch/clean-deploy-xp.sh`. SYGNAS files never committed (download-at-build; local
-  copies in `work/scr/gdrive/`, gitignored). Deferred: a deep search for the apology release's provenance.
+  copies in `work/scr/gdrive/`, gitignored). **Provenance FOUND (2026-06-24, deep-research):** SYGNAS's
+  own apology — a スクリーンセーバー無料配布 notice on the `sygnas.jp/doujin/luckymaster/` special site (the mutex
+  path), **dated 2008-01-09** (nine days after the C73 sale; the Dec-2007 file dates are build mtimes),
+  four ZIPs on two mirrors (sygnas.jp + clic-clac.jp), the clic-clac copy byte-identical to our pin. Full
+  quote + Wayback cites in [`screensaver-re.md`](screensaver-re.md) §"Why the disc only has stubs".

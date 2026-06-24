@@ -63,13 +63,29 @@ After a run the engine's `ping.txt` connectivity marker appears, but **`saver.da
 (SHA-256 `f3940514…`) lists 164 files in `app/` + `sys/` only — **zero `.dat`**; the ~135 KB packed engine
 has no room to embed a movie.
 
-## Why the disc only has stubs
+## Why the disc only has stubs — SYGNAS's apology (primary source)
 
-Documented creator history (community, 2026): the disc screensavers *"had errors that just made them flat
-out not work,"* so SYGNAS released the **true working ones on their website as an apology/compensation.**
-Those are standalone installers — `chibi_setup.exe`, `imas3d_setup.exe`, `imas_comic_setup.exe`,
-`luckystar_comic_setup.exe` — that bundle the engine + a **Flash-8 movie** (`CWS v8`: chibi ≈ 162 KB,
-imas3d ≈ 14.5 MB) + **`flash8.ocx`** (Flash Player 8 ActiveX). The disc bundled only the gutted engine.
+SYGNAS said so themselves. Their らき☆マス special site at **`http://sygnas.jp/doujin/luckymaster/`** (the
+exact path the launcher carries as its mutex) ran a スクリーンセーバー無料配布 ("free screensaver distribution")
+notice: 「収録していたスクリーンセーバーが正常に動作しないことが判明しました。皆様にはご迷惑をおかけして本当に申し訳
+ありません。お詫びの意味を込めて収録しているスクリーンセーバーを無料配布いたします。」 ("It has come to light that the
+included screensavers do not operate correctly. We sincerely apologize for the inconvenience. As a token of
+apology, we are distributing the included screensavers free of charge."). Located + byte-verified via the
+Wayback Machine (deep-research, 2026-06-24):
+
+- **Date: 2008-01-09** (site WHAT'S NEW: 「2008.01.09 収録スクリーンセーバーの無料配布を開始。」) — nine days AFTER the
+  Comiket 73 sale (2007-12-31). ⚠️ The `Dec 2-3 2007` timestamps on the installer files are internal **build
+  mtimes**, NOT the release date; the 2007-12-13/17 Wayback captures have an empty Updater slot and NO
+  apology text (the apology first appears in the 2008-01-12 capture, stable through 2009-09-17).
+- Distributed as **four ZIPs** (`scr_imas_comic.zip`, `scr_lucky_comic.zip`, `scr_chibi.zip`,
+  `scr_imas3d.zip`) on **two identical mirrors**: `sygnas.jp/doujin/luckymaster/update/` and a
+  `clic-clac.jp/products/luckymaster/update/` backup ("ダウンロード1、2はどちらも同じファイルです"). Each ZIP holds one
+  standalone installer (`*_setup.exe`) bundling the engine + a **Flash-8 movie** (`CWS v8`: chibi ≈ 162 KB,
+  imas3d ≈ 14.5 MB) + **`flash8.ocx`** (Flash Player 8 ActiveX). The disc bundled only the gutted engine.
+- **Independently confirmed:** the clic-clac.jp mirror is still Wayback-archived; `chibi_setup.exe` pulled
+  from its `scr_chibi.zip` is byte-identical (sha `9ec7cea2…`) to the file we pin in `screensaver_restore.py`.
+- Page identity: author `ダダ` (Dada), title "SYGNAS「らき☆マス デスクトップアクセサリ」", C73 day-3 booth 東地区 A-55a.
+  Wayback: `http://web.archive.org/web/20090917224409/http://sygnas.jp/doujin/luckymaster/`.
 
 **Verified live:** installing `chibi_setup.exe` over the broken stub → the chibi screensaver previews in
 Display Properties **and** runs fullscreen (iM@S/Lucky☆Star chibis on coloured stripes).

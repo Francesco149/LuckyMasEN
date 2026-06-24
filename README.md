@@ -2,7 +2,7 @@
 
 **English fan-translation + a one-command patcher** for SYGNAS 「らき☆マス」(*Lucky☆Mas*) — a 2007
 *Lucky☆Star × THE iDOLM@STER* **desktop-accessory pack** (circle **SYGNAS**, catalog SGNS-0009,
-Comiket 73). Desktop mascots, a calendar companion that talks to you, themed calculators, wallpapers, and
+Comiket 73). Desktop mascots, a calendar companion that notifies you, themed calculators, wallpapers, and
 the four Flash screensavers — fully in English, running on **real Windows XP**, with **no Google account**
 needed. (The disc shipped its screensavers broken — gutted engines with no content; the patch restores
 the working ones, see below.)
@@ -54,8 +54,7 @@ SYGNAS packaging defect, on every locale). The patch sources the working content
 ### 💜 For SYGNAS, the original authors
 
 らき☆マス was a doujin labor of love: hand-drawn *Lucky☆Star × iM@S* characters living on your desktop, a
-whole in-house animation engine (**MinkIt**) built just to make them move, a calendar mascot that actually
-*talked* to you, themed calculators, screensavers, wallpapers — an entire little world, made by fans for
+whole in-house animation engine (**MinkIt**) built just to make them move, a calendar mascot that notified you about mail and events, themed calculators, screensavers, wallpapers — an entire little world, made by fans for
 fans in 2007 with extraordinary care. Every character, every frame, and all of the original software is
 **theirs**. This project exists only to keep that work alive on modern machines and let more people
 discover it. Thank you for making something with so much soul.
@@ -71,7 +70,7 @@ reverse-engineering behind it all is documented at the **bottom of this README**
 |---|---|---|
 | 🧍 **Desktop mascots** ("Copy Animation") | Hand-drawn Konata / Kagami / Chihaya / Makoto / Yayoi (per-pixel-alpha, driven by the in-house **MinkIt** engine) that replace XP's file-copy animation. | Copy or move files in Explorer — a character plays the copy. Right-click its tray icon ▸ **Options** to choose the character or enable it per file operation. |
 | 🗨️ **The launcher** | A desktop mascot (22 characters) with English speech bubbles. | **Click on her chest** to open the app launcher — yes, really; it's a classic anime gag — the **left side** opens the main menu (calculators, calendar, copy-animation, wallpaper, Display Properties), the **right side** opens a second menu (empty by default, for your own shortcuts). **Right-click her** for Calendar check / Mail check / Settings. **Add or change menu entries** in `launcher\Launch.ini`: under `[Launch]`, `Exec000…`/`Title000…` is the left menu and `Exec100…`/`Title100…` the right; `[Data] Chara=konata.Xvi` swaps the mascot. |
-| 📅 **The talking calendar** | A mascot that speaks today's plans — originally Google Calendar, revived by a **bundled local server** (no Google account, no internet). | Runs at startup, or right-click the mascot ▸ **calendar check** → she reads the day's events. **Google Calendar** in the menu opens the full month grid. Put your own events in `gcal-xp\gcalsrv.lua` (the `EVENTS` table — it hot-reloads on save). |
+| 📅 **The calendar** | A mascot that checks today's plans — originally Google Calendar, revived by a **bundled local server** (no Google account, no internet). | Runs at startup, or right-click the mascot ▸ **calendar check** → she reads the day's events. **Google Calendar** in the menu opens the full month grid. Put your own events in `gcal-xp\gcalsrv.lua` (the `EVENTS` table — it hot-reloads on save). |
 | 📬 **Mail check** | A "you've got mail" bubble backed by a working local **POP3** mailbox. | Runs at startup, or right-click the mascot ▸ **mail check**; the bubble opens your mail client (Outlook Express by default). Edit your inbox in `gcalsrv.lua` (the `MAIL` table). |
 | 🧮 **Themed calculators** | iM@S- and Lucky☆Star-skinned calculators plus a doujin unit **converter**. | Launch **iM@S Calculator** or **Lucky Star Calculator** from the launcher menu. The converter does BPM↔ms, ms↔fps frames, page-count↔paper thickness, and tax. |
 | 🖼️ **Wallpapers** | 84 wallpapers (14 artists × resolutions) with an HTML **picker**. | Launch **Wallpaper** from the menu, then click a thumbnail in the gallery to set it. |

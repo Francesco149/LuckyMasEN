@@ -41,7 +41,7 @@ SYGNAS packaging defect, on every locale). The patch sources the working content
 - 💿 **The disc is out of print.** This patch applies to **your own copy** — find one second-hand (when
   it's in stock) on **[Suruga-ya](https://www.suruga-ya.jp/product/detail/186014567)**. The circle's
   site is long gone; there is no official store anymore.
-- 🎨 **The original creator** (SYGNAS / ダダ) is now a professional web developer —
+- 🎨 **The original creator** is SYGNAS (ダダ) —
   **[x.com/sygnas](https://x.com/sygnas)**. There is no donation channel for the original work; if you
   can, buy the disc second-hand to support it.
 - 💜 **Support this reverse-engineering & translation work:** **[ko-fi.com/lolisamurai](https://ko-fi.com/lolisamurai)**

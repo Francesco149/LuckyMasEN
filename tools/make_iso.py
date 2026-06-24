@@ -409,9 +409,12 @@ def main(argv):
     iscc        = resolve_iscc(args.iscc);               info(f"ISCC:        {iscc}")
 
     originals_parent = stage_extract(setup_exe, work, innoextract)
+    # Font MUST be resolved before the patch: build_patch bakes the calc button labels and wallpaper
+    # headers (calc_png/img_text) with out/font/msgothic.ttc.  If it runs first, those ops fall back to
+    # PIL's ~10px bitmap default and every baked label comes out microscopic (the Windows fresh-build bug).
+    stage_font(args.font, out_font)
     stage_patch(originals_parent, out_patched)
     stage_screensavers(out_patched, offline=args.offline, skip=args.skip_screensavers)
-    stage_font(args.font, out_font)
     stage_wizard_art(setup_exe, out / "og-extract", innounp)
     out_setup = out / "iss-build" / "setup.exe"
     stage_compile(iscc, out_setup)

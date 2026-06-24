@@ -21,19 +21,38 @@ _FONT_CACHE = {}
 
 
 def resolve_font(size, index=1):
-    """MS PGothic (msgothic.ttc index 1) if the builder supplied it; else a sans fallback.
-    Returns (font, name) so the caller can log which was used."""
+    """The builder-supplied MS PGothic (out/font/msgothic.ttc), selected by face NAME.
+
+    The face order inside msgothic.ttc varies by Windows version (e.g. MS PGothic is index 1 on some,
+    index 2 on others where index 1 is MS UI Gothic), so we pick by name instead of a fixed index.
+    Returns (font, name) for logging.  Raises if no scalable font is available: we deliberately do NOT
+    fall back to PIL's bitmap default, which ignores `size` and bakes every label at ~10px (the cause of
+    the "all the baked text is tiny" Windows fresh-build bug).  Requires get_font.py to have run first
+    (make_iso.py resolves the font before the patch step)."""
     ttc = os.path.join(REPO, 'out', 'font', 'msgothic.ttc')
     key = (size, index)
     if key in _FONT_CACHE:
         return _FONT_CACHE[key]
     if os.path.exists(ttc):
-        try:
-            f = (ImageFont.truetype(ttc, size, index=index), 'MS PGothic')
-            _FONT_CACHE[key] = f
-            return f
-        except Exception:
-            pass
+        chosen = first = None
+        for i in [index] + [j for j in range(4) if j != index]:   # prefer `index`, then scan the rest
+            try:
+                f = ImageFont.truetype(ttc, size, index=i)
+            except Exception:
+                continue
+            try:
+                fam = f.getname()[0]
+            except Exception:
+                fam = ''
+            if first is None:
+                first = (f, fam or 'msgothic.ttc#%d' % i)
+            if fam == 'MS PGothic':
+                chosen = (f, 'MS PGothic')
+                break
+        result = chosen or first
+        if result is not None:
+            _FONT_CACHE[key] = result
+            return result
     for cand in ('DejaVuSans.ttf', 'LiberationSans-Regular.ttf', 'FreeSans.ttf'):
         try:
             f = (ImageFont.truetype(cand, size), cand)
@@ -41,9 +60,10 @@ def resolve_font(size, index=1):
             return f
         except Exception:
             continue
-    f = (ImageFont.load_default(), 'PIL-default')
-    _FONT_CACHE[key] = f
-    return f
+    raise RuntimeError(
+        "calc_png: no scalable font for baking text. Expected MS PGothic at %s -- run tools/get_font.py "
+        "first (make_iso.py now does, before the patch step). Refusing PIL's bitmap default, which would "
+        "render every baked label ~10px tall (tiny)." % ttc)
 
 
 def _lum(c):

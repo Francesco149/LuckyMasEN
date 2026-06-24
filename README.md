@@ -7,7 +7,7 @@ the four Flash screensavers — fully in English, running on **real Windows XP**
 needed. (The disc shipped its screensavers broken — gutted engines with no content; the patch restores
 the working ones, see below.)
 
-Video demonstrating all of its features on a real CRT: [youtube](https://youtu.be/BSmVPt_1tPc).
+Video demonstrating all of its features on a real CRT: [youtube](https://youtu.be/jq9o3YaaRXg).
 
 Plus a complete reverse-engineering log of SYGNAS's in-house **MinkIt** mascot engine and its container
 formats. Give the tool your *own* copy of the disc; it builds you an English `setup.exe` / ISO. No

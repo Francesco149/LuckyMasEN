@@ -2,8 +2,10 @@
 
 **English fan-translation + a one-command patcher** for SYGNAS 「らき☆マス」(*Lucky☆Mas*) — a 2007
 *Lucky☆Star × THE iDOLM@STER* **desktop-accessory pack** (circle **SYGNAS**, catalog SGNS-0009,
-Comiket 73). Desktop mascots, a calendar companion that talks to you, themed calculators, and wallpapers
-— fully in English, running on **real Windows XP**, with **no Google account** needed.
+Comiket 73). Desktop mascots, a calendar companion that talks to you, themed calculators, wallpapers, and
+the four Flash screensavers — fully in English, running on **real Windows XP**, with **no Google account**
+needed. (The disc shipped its screensavers broken — gutted engines with no content; the patch restores
+the working ones, see below.)
 
 Plus a complete reverse-engineering log of SYGNAS's in-house **MinkIt** mascot engine and its container
 formats. Give the tool your *own* copy of the disc; it builds you an English `setup.exe` / ISO. No
@@ -19,6 +21,18 @@ original SYGNAS file is ever redistributed.
 | ![Desktop mascots and the MinkIt copy animation, with the Settings and Preview dialogs Englished](docs/screenshots/minkit-desktop.png)<br>**Desktop mascots & copy animation** | ![Miki's "you've got mail" speech bubble, served by the local fake-Google POP3 server](docs/screenshots/mail-miki.png)<br>**"You've got mail"** |
 | ![A Lucky☆Star-themed calculator with its baked button labels re-drawn in English](docs/screenshots/calc-imas.png)<br>**Themed calculators** | ![The doujin unit converter: fps↔ms, BPM, page-count↔paper thickness, tax](docs/screenshots/calc-convert.png)<br>**Unit conversions** |
 | ![gcal's full month grid reading today's events from the local server, with an event detail page](docs/screenshots/gcal-calendar.png)<br>**The month grid** | ![The launcher Settings dialog — every menu, label and tooltip translated in the PE resources](docs/screenshots/settings.png)<br>**Launcher settings** |
+
+#### The four screensavers — restored
+
+The disc's screensavers never ran (it shipped the ScreenTime-for-Flash engine **without** its content — a
+SYGNAS packaging defect, on every locale). The patch sources the working content from SYGNAS's own
+"apology" re-release and merges it back in, so all four run again — on any locale (shots from a real
+**English** XP):
+
+| | |
+|:---:|:---:|
+| ![2D chibi characters walk across the screen leaving coloured trails](docs/screenshots/screensaver-chibi.png)<br>**Chibi Characters** — chibis stroll past, trailing colour | ![A busy 3D scene of iDOLM@STER idols walking and crossing paths](docs/screenshots/screensaver-imas3d.png)<br>**iM@S 3D** — a busy 3D idol scene |
+| ![A slow cutscene told in manga panels (iDOLM@STER)](docs/screenshots/screensaver-imas-comic.png)<br>**iM@S 4-koma** — a slow manga-panel cutscene | ![A slow cutscene told in manga panels (Lucky☆Star)](docs/screenshots/screensaver-luckystar-comic.png)<br>**Lucky☆Star 4-koma** — a slow manga-panel cutscene |
 
 ---
 

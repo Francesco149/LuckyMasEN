@@ -100,9 +100,19 @@ ground truth):
   `cabextract`/`7z`/Windows `expand`.
 
 `make_iso.py` runs the restore after the patch (non-fatal; `--skip-screensavers` to opt out); `setup.iss`
-ships the working dirs + Flash and `regsvr32`-registers the OCX (both `#if FileExists`-guarded). **Validated
-end-to-end under wine** (built EN installer → silent install → all four run fullscreen from `{sys}`). RE
-tooling + the per-installer extraction table: `tools/screensaver_restore.py`; session log in
+ships the working dirs + Flash and `regsvr32`-registers the OCX (both `#if FileExists`-guarded).
+
+**What each one shows** (all four are the SYGNAS Flash content, unchanged — only filenames are ASCII'd):
+- **Chibi Characters** — 2D chibi mascots walk across the screen leaving coloured trails.
+- **iM@S 3D** — a busy 3D scene: iDOLM@STER idols walking and crossing paths (765Pro angel watermark).
+- **iM@S 4-koma / Lucky☆Star 4-koma** — slowly play a cutscene told in manga panels (they fade to white
+  between panels — mind that when screenshotting).
+
+**Validated end-to-end under wine** (built EN installer → silent install → all four run fullscreen) **and
+LIVE on the real EN-locale box q9650** (wiped prior install → installed the built `setup.exe` → all four
+preview/run fullscreen; the ASCII swf/`saver.dat` fix confirmed on actual EN XP, not just wine). The
+clean-install ops are scripted in retro-hardware `projects/minkit-en-patch/clean-deploy-xp.sh`. RE tooling
++ the per-installer extraction table: `tools/screensaver_restore.py`; session log in
 [`next-builds.md`](next-builds.md) §"Session 18".
 
 ## Ops note (gotcha)

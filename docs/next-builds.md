@@ -779,6 +779,8 @@ InstallShield-MSI `*_setup.exe` (the engine + a Flash-8 `CWS v8` movie + `flash8
 - **Wiring:** `make_iso.py` → `stage_screensavers` (after patch; non-fatal; `--skip-screensavers`);
   `setup.iss` recurses `sys\*` and `regsvr32`-registers the OCX (`#if FileExists`-guarded). **Validated
   e2e under wine**: built EN installer → silent install → all four run fullscreen from `{sys}`; ISCC
-  clean (≈70 MB setup). Pending (gold standard): a live XP smoke-test (Display-Properties picker +
-  preview). SYGNAS files never committed (download-at-build; local copies in `work/scr/gdrive/`,
-  gitignored). Deferred: a deep search for the apology release's provenance/history.
+  clean (≈70 MB setup) **and LIVE on the real EN-locale box q9650** (clean-wiped prior install → installed
+  the built `setup.exe` → all four run fullscreen; ASCII-locale fix confirmed on real EN XP). Hero shots in
+  `docs/screenshots/screensaver-*.png`; clean-install ops scripted in retro-hardware
+  `projects/minkit-en-patch/clean-deploy-xp.sh`. SYGNAS files never committed (download-at-build; local
+  copies in `work/scr/gdrive/`, gitignored). Deferred: a deep search for the apology release's provenance.
